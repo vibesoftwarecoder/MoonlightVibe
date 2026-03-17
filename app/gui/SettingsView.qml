@@ -73,6 +73,7 @@ Flickable {
         // This enables Tab and BackTab based navigation rather than arrow keys.
         // It is required to shift focus between controls on the settings page.
         SdlGamepadKeyNavigation.setUiNavMode(true)
+        StreamingPreferences.setMicrophoneMonitorActive(true)
 
         // Highlight the first item if a gamepad is connected
         if (SdlGamepadKeyNavigation.getConnectedGamepads() > 0) {
@@ -82,6 +83,7 @@ Flickable {
 
     StackView.onDeactivating: {
         SdlGamepadKeyNavigation.setUiNavMode(false)
+        StreamingPreferences.setMicrophoneMonitorActive(false)
 
         // Save the prefs so the Session can observe the changes
         StreamingPreferences.save()
@@ -90,6 +92,7 @@ Flickable {
     Component.onDestruction: {
         // Also save preferences on destruction, since we won't get a
         // deactivating callback if the user just closes Moonlight
+        StreamingPreferences.setMicrophoneMonitorActive(false)
         StreamingPreferences.save()
     }
 
@@ -948,6 +951,7 @@ Flickable {
                     checked: StreamingPreferences.enableMicrophone
                     onCheckedChanged: {
                         StreamingPreferences.enableMicrophone = checked
+                        StreamingPreferences.refreshMicrophoneMonitor()
                     }
 
                     ToolTip.delay: 1000
@@ -986,6 +990,7 @@ Flickable {
                         else {
                             StreamingPreferences.microphoneDevice = StreamingPreferences.microphoneDevices[currentIndex - 1]
                         }
+                        StreamingPreferences.refreshMicrophoneMonitor()
                     }
 
                     Connections {
@@ -1000,6 +1005,42 @@ Flickable {
                     ToolTip.timeout: 5000
                     ToolTip.visible: hovered
                     ToolTip.text: qsTr("Choose which local microphone Moonlight captures. Leave this on the default option to follow your system input device.")
+                }
+
+                Label {
+                    width: parent.width
+                    text: qsTr("Microphone input preview")
+                    font.pointSize: 12
+                    wrapMode: Text.Wrap
+                }
+
+                Rectangle {
+                    width: parent.width
+                    height: 16
+                    radius: 8
+                    color: "#202733"
+                    border.width: 1
+                    border.color: StreamingPreferences.microphoneMonitorSignalDetected ? "#45c486" : "#3d4857"
+
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: Math.max(6, parent.width * StreamingPreferences.microphoneMonitorLevel)
+                        height: parent.height
+                        radius: parent.radius
+                        visible: StreamingPreferences.microphoneMonitorLevel > 0.001
+                        color: StreamingPreferences.microphoneMonitorSignalDetected ? "#45c486" : "#5f6f86"
+                    }
+                }
+
+                Label {
+                    width: parent.width
+                    wrapMode: Text.Wrap
+                    font.pointSize: 10
+                    text: StreamingPreferences.microphoneMonitorStatus + "\n" +
+                          (StreamingPreferences.microphoneMonitorSignalDetected ?
+                               qsTr("Input detected on the selected microphone.") :
+                               qsTr("No microphone input detected yet."))
                 }
             }
         }
