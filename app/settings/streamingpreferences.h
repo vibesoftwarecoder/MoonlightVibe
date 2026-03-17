@@ -4,12 +4,19 @@
 #include <QRect>
 #include <QQmlEngine>
 #include <QStringList>
+#include <atomic>
+
+#include "SDL_compat.h"
+
+class QTimer;
 
 class StreamingPreferences : public QObject
 {
     Q_OBJECT
 
 public:
+    ~StreamingPreferences() override;
+
     static StreamingPreferences* get(QQmlEngine *qmlEngine = nullptr);
 
     Q_INVOKABLE static int
@@ -133,6 +140,9 @@ public:
     Q_PROPERTY(bool enableMicrophone MEMBER enableMicrophone NOTIFY enableMicrophoneChanged)
     Q_PROPERTY(QString microphoneDevice MEMBER microphoneDevice NOTIFY microphoneDeviceChanged)
     Q_PROPERTY(QStringList microphoneDevices READ microphoneDevices NOTIFY microphoneDevicesChanged)
+    Q_PROPERTY(double microphoneMonitorLevel READ microphoneMonitorLevel NOTIFY microphoneMonitorLevelChanged)
+    Q_PROPERTY(QString microphoneMonitorStatus READ microphoneMonitorStatus NOTIFY microphoneMonitorStatusChanged)
+    Q_PROPERTY(bool microphoneMonitorSignalDetected READ microphoneMonitorSignalDetected NOTIFY microphoneMonitorSignalDetectedChanged)
     Q_PROPERTY(AudioConfig audioConfig MEMBER audioConfig NOTIFY audioConfigChanged)
     Q_PROPERTY(VideoCodecConfig videoCodecConfig MEMBER videoCodecConfig NOTIFY videoCodecConfigChanged)
     Q_PROPERTY(bool enableHdr MEMBER enableHdr NOTIFY enableHdrChanged)
@@ -152,8 +162,13 @@ public:
 
     Q_INVOKABLE bool retranslate();
     Q_INVOKABLE void refreshMicrophoneDevices();
+    Q_INVOKABLE void setMicrophoneMonitorActive(bool active);
+    Q_INVOKABLE void refreshMicrophoneMonitor();
 
     QStringList microphoneDevices() const;
+    double microphoneMonitorLevel() const;
+    QString microphoneMonitorStatus() const;
+    bool microphoneMonitorSignalDetected() const;
 
     // Directly accessible members for preferences
     int width;
@@ -228,6 +243,9 @@ signals:
     void enableMicrophoneChanged();
     void microphoneDeviceChanged();
     void microphoneDevicesChanged();
+    void microphoneMonitorLevelChanged();
+    void microphoneMonitorStatusChanged();
+    void microphoneMonitorSignalDetectedChanged();
     void mouseButtonsChanged();
     void muteOnFocusLossChanged();
     void backgroundGamepadChanged();
@@ -239,9 +257,24 @@ signals:
 
 private:
     explicit StreamingPreferences(QQmlEngine *qmlEngine);
+    static void microphoneMonitorCallback(void* userdata, Uint8* stream, int len);
+
+    bool startMicrophoneMonitor();
+    void stopMicrophoneMonitor(const QString& status = QString());
+    void processMicrophoneMonitorData(const Uint8* stream, int len);
+    void updateMicrophoneMonitorState();
+    void setMicrophoneMonitorStatus(const QString& status);
 
     QString getSuffixFromLanguage(Language lang);
 
     QQmlEngine* m_QmlEngine;
     QStringList m_MicrophoneDevices;
+    SDL_AudioDeviceID m_MicrophoneMonitorDeviceId;
+    SDL_AudioSpec m_MicrophoneMonitorSpec;
+    QTimer* m_MicrophoneMonitorTimer;
+    std::atomic<int> m_PendingMicrophonePeak;
+    double m_MicrophoneMonitorLevel;
+    bool m_MicrophoneMonitorActive;
+    bool m_MicrophoneMonitorSignalDetected;
+    QString m_MicrophoneMonitorStatus;
 };
