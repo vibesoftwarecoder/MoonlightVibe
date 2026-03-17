@@ -2,6 +2,7 @@
 #include "settings/streamingpreferences.h"
 #include "streaming/streamutils.h"
 #include "backend/richpresencemanager.h"
+#include "streaming/audio/capture/microphonecapture.h"
 
 #include <Limelight.h>
 #include "SDL_compat.h"

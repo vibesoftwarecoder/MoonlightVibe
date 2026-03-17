@@ -11,6 +11,8 @@
 #include "audio/renderers/renderer.h"
 #include "video/overlaymanager.h"
 
+class MicrophoneCapture;
+
 class SupportedVideoFormatList : public QList<int>
 {
 public:
@@ -157,10 +159,13 @@ private:
     IAudioRenderer* createAudioRenderer(const POPUS_MULTISTREAM_CONFIGURATION opusConfig);
 
     bool initializeAudioRenderer();
+    bool initializeMicrophoneCapture();
 
     bool testAudio(int audioConfiguration);
 
     int getAudioRendererCapabilities(int audioConfiguration);
+
+    void destroyMicrophoneCapture();
 
     void getWindowDimensions(int& x, int& y,
                              int& width, int& height);
@@ -278,6 +283,8 @@ private:
     OPUS_MULTISTREAM_CONFIGURATION m_OriginalAudioConfig;
     int m_AudioSampleCount;
     Uint32 m_DropAudioEndTime;
+    MicrophoneCapture* m_MicrophoneCapture;
+    bool m_MicrophoneEnabled;
 
     Overlay::OverlayManager m_OverlayManager;
 
