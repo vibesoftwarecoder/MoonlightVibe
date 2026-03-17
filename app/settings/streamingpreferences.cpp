@@ -1,4 +1,5 @@
 #include "streamingpreferences.h"
+#include "SDL_compat.h"
 #include "utils.h"
 
 #include <QSettings>
@@ -43,6 +44,8 @@
 #define SER_PACKETSIZE "packetsize"
 #define SER_DETECTNETBLOCKING "detectnetblocking"
 #define SER_SHOWPERFOVERLAY "showperfoverlay"
+#define SER_ENABLEMICROPHONE "enablemicrophone"
+#define SER_MICROPHONEDEVICE "microphonedevice"
 #define SER_SWAPMOUSEBUTTONS "swapmousebuttons"
 #define SER_MUTEONFOCUSLOSS "muteonfocusloss"
 #define SER_BACKGROUNDGAMEPAD "backgroundgamepad"
@@ -143,6 +146,8 @@ void StreamingPreferences::reload()
     gamepadMouse = settings.value(SER_GAMEPADMOUSE, true).toBool();
     detectNetworkBlocking = settings.value(SER_DETECTNETBLOCKING, true).toBool();
     showPerformanceOverlay = settings.value(SER_SHOWPERFOVERLAY, false).toBool();
+    enableMicrophone = settings.value(SER_ENABLEMICROPHONE, false).toBool();
+    microphoneDevice = settings.value(SER_MICROPHONEDEVICE, "").toString();
     packetSize = settings.value(SER_PACKETSIZE, 0).toInt();
     swapMouseButtons = settings.value(SER_SWAPMOUSEBUTTONS, false).toBool();
     muteOnFocusLoss = settings.value(SER_MUTEONFOCUSLOSS, false).toBool();
@@ -190,6 +195,8 @@ void StreamingPreferences::reload()
         videoCodecConfig = VCC_AUTO;
         enableHdr = true;
     }
+
+    refreshMicrophoneDevices();
 }
 
 bool StreamingPreferences::retranslate()
@@ -342,6 +349,8 @@ void StreamingPreferences::save()
     settings.setValue(SER_PACKETSIZE, packetSize);
     settings.setValue(SER_DETECTNETBLOCKING, detectNetworkBlocking);
     settings.setValue(SER_SHOWPERFOVERLAY, showPerformanceOverlay);
+    settings.setValue(SER_ENABLEMICROPHONE, enableMicrophone);
+    settings.setValue(SER_MICROPHONEDEVICE, microphoneDevice);
     settings.setValue(SER_AUDIOCFG, static_cast<int>(audioConfig));
     settings.setValue(SER_HDR, enableHdr);
     settings.setValue(SER_YUV444, enableYUV444);
@@ -358,6 +367,47 @@ void StreamingPreferences::save()
     settings.setValue(SER_SWAPFACEBUTTONS, swapFaceButtons);
     settings.setValue(SER_CAPTURESYSKEYS, captureSysKeysMode);
     settings.setValue(SER_KEEPAWAKE, keepAwake);
+}
+
+QStringList StreamingPreferences::microphoneDevices() const
+{
+    return m_MicrophoneDevices;
+}
+
+void StreamingPreferences::refreshMicrophoneDevices()
+{
+    const bool audioWasInitialized = SDL_WasInit(SDL_INIT_AUDIO) != 0;
+    if (!audioWasInitialized && SDL_InitSubSystem(SDL_INIT_AUDIO) != 0) {
+        qWarning() << "Failed to initialize SDL audio for microphone enumeration:" << SDL_GetError();
+        return;
+    }
+
+    QStringList devices;
+    const int deviceCount = SDL_GetNumAudioDevices(SDL_TRUE);
+    for (int i = 0; i < deviceCount; ++i) {
+        const char* name = SDL_GetAudioDeviceName(i, SDL_TRUE);
+        if (name == nullptr || *name == '\0') {
+            continue;
+        }
+
+        const QString deviceName = QString::fromUtf8(name);
+        if (!devices.contains(deviceName)) {
+            devices.append(deviceName);
+        }
+    }
+
+    if (!microphoneDevice.isEmpty() && !devices.contains(microphoneDevice)) {
+        devices.prepend(microphoneDevice);
+    }
+
+    if (!audioWasInitialized) {
+        SDL_QuitSubSystem(SDL_INIT_AUDIO);
+    }
+
+    if (devices != m_MicrophoneDevices) {
+        m_MicrophoneDevices = devices;
+        emit microphoneDevicesChanged();
+    }
 }
 
 int StreamingPreferences::getDefaultBitrate(int width, int height, int fps, bool yuv444)
