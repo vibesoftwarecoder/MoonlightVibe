@@ -939,6 +939,68 @@ Flickable {
                     ToolTip.visible: hovered
                     ToolTip.text: qsTr("Mutes Moonlight's audio when you Alt+Tab out of the stream or click on a different window.")
                 }
+
+                CheckBox {
+                    id: enableMicrophoneCheck
+                    width: parent.width
+                    text: qsTr("Enable microphone streaming")
+                    font.pointSize: 12
+                    checked: StreamingPreferences.enableMicrophone
+                    onCheckedChanged: {
+                        StreamingPreferences.enableMicrophone = checked
+                    }
+
+                    ToolTip.delay: 1000
+                    ToolTip.timeout: 5000
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Streams your microphone audio to the host PC when the host supports microphone passthrough.")
+                }
+
+                AutoResizingComboBox {
+                    id: microphoneDeviceComboBox
+                    width: parent.width
+                    enabled: enableMicrophoneCheck.checked
+                    model: [qsTr("Default system microphone")].concat(StreamingPreferences.microphoneDevices)
+
+                    function syncSelection() {
+                        const savedDevice = StreamingPreferences.microphoneDevice
+                        currentIndex = 0
+
+                        for (let i = 0; i < StreamingPreferences.microphoneDevices.length; i++) {
+                            if (StreamingPreferences.microphoneDevices[i] === savedDevice) {
+                                currentIndex = i + 1
+                                return
+                            }
+                        }
+                    }
+
+                    Component.onCompleted: {
+                        StreamingPreferences.refreshMicrophoneDevices()
+                        syncSelection()
+                    }
+
+                    onActivated: {
+                        if (currentIndex === 0) {
+                            StreamingPreferences.microphoneDevice = ""
+                        }
+                        else {
+                            StreamingPreferences.microphoneDevice = StreamingPreferences.microphoneDevices[currentIndex - 1]
+                        }
+                    }
+
+                    Connections {
+                        target: StreamingPreferences
+
+                        function onMicrophoneDevicesChanged() {
+                            microphoneDeviceComboBox.syncSelection()
+                        }
+                    }
+
+                    ToolTip.delay: 1000
+                    ToolTip.timeout: 5000
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Choose which local microphone Moonlight captures. Leave this on the default option to follow your system input device.")
+                }
             }
         }
 
