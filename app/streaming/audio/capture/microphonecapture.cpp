@@ -11,6 +11,7 @@ MicrophoneCapture::MicrophoneCapture(QObject* parent)
     , m_Streaming(false)
     , m_Initialized(false)
     , m_Enabled(false)
+    , m_FirstPacketLogged(false)
 {
 }
 
@@ -121,7 +122,10 @@ bool MicrophoneCapture::start()
     }
 
     clearBufferedSamples();
+    m_FirstPacketLogged = false;
     m_Streaming.store(true, std::memory_order_release);
+    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                "Microphone capture streaming started; negotiated mic stream is active");
     SDL_PauseAudioDevice(m_DeviceId, 0);
     return true;
 }
@@ -181,7 +185,17 @@ void MicrophoneCapture::handleAudioData(const Uint8* stream, int len)
                                        m_EncodedPacket.data(),
                                        (opus_int32)m_EncodedPacket.size());
         if (encodedBytes > 0) {
-            LiSendMicrophoneOpusData(m_EncodedPacket.data(), encodedBytes);
+            int sendResult = LiSendMicrophoneOpusData(m_EncodedPacket.data(), encodedBytes);
+            if (sendResult >= 0 && !m_FirstPacketLogged) {
+                m_FirstPacketLogged = true;
+                SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                            "Sent first client microphone packet (%d bytes Opus)",
+                            encodedBytes);
+            }
+            else if (sendResult < 0) {
+                SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                            "LiSendMicrophoneOpusData() failed for microphone capture");
+            }
         }
 
         m_SampleBuffer.erase(m_SampleBuffer.begin(), m_SampleBuffer.begin() + kFrameSize);
