@@ -39,6 +39,7 @@ private:
     std::atomic_bool m_Streaming;
     bool m_Initialized;
     bool m_Enabled;
+    bool m_FirstPacketLogged;
 
     static constexpr int kSampleRate = 48000;
     static constexpr int kChannels = 1;
