@@ -66,6 +66,8 @@ bool MicrophoneCapture::initialize(const std::string& deviceName)
     opus_encoder_ctl(m_Encoder, OPUS_SET_COMPLEXITY(10));
     opus_encoder_ctl(m_Encoder, OPUS_SET_SIGNAL(OPUS_SIGNAL_VOICE));
     opus_encoder_ctl(m_Encoder, OPUS_SET_LSB_DEPTH(16));
+    opus_encoder_ctl(m_Encoder, OPUS_SET_INBAND_FEC(1));
+    opus_encoder_ctl(m_Encoder, OPUS_SET_PACKET_LOSS_PERC(5));
 
     SDL_AudioSpec desired = {};
     desired.freq = kSampleRate;
@@ -240,7 +242,7 @@ void MicrophoneCapture::encoderLoop()
             continue;
         }
 
-        int sendResult = LiSendMicrophoneOpusData(m_EncodedPacket.data(), encodedBytes);
+        int sendResult = LiSendMicrophoneOpusDataEx(m_EncodedPacket.data(), encodedBytes, kFrameSize);
         if (sendResult >= 0 && !m_FirstPacketLogged) {
             m_FirstPacketLogged = true;
             SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
