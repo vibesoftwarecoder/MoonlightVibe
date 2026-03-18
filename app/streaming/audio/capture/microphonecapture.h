@@ -3,7 +3,10 @@
 #include <QObject>
 #include <atomic>
 #include <array>
+#include <condition_variable>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <SDL.h>
@@ -29,17 +32,21 @@ private:
     static void audioCallback(void* userdata, Uint8* stream, int len);
     void handleAudioData(const Uint8* stream, int len);
     void clearBufferedSamples();
+    void encoderLoop();
 
     SDL_AudioDeviceID m_DeviceId;
     SDL_AudioSpec m_ObtainedSpec;
-    SDL_mutex* m_Lock;
     OpusEncoder* m_Encoder;
     std::vector<opus_int16> m_SampleBuffer;
     std::array<unsigned char, 1400> m_EncodedPacket;
     std::atomic_bool m_Streaming;
+    std::atomic_bool m_StopEncoderThread;
     bool m_Initialized;
     bool m_Enabled;
     bool m_FirstPacketLogged;
+    std::mutex m_BufferMutex;
+    std::condition_variable m_BufferCondition;
+    std::thread m_EncoderThread;
 
     static constexpr int kSampleRate = 48000;
     static constexpr int kChannels = 1;
