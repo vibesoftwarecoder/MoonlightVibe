@@ -1,6 +1,7 @@
 #include "microphonecapture.h"
 
 #include <algorithm>
+#include <chrono>
 #include <Limelight.h>
 
 MicrophoneCapture::MicrophoneCapture(QObject* parent)
@@ -64,6 +65,7 @@ bool MicrophoneCapture::initialize(const std::string& deviceName)
     opus_encoder_ctl(m_Encoder, OPUS_SET_COMPLEXITY(10));
     opus_encoder_ctl(m_Encoder, OPUS_SET_SIGNAL(OPUS_SIGNAL_VOICE));
     opus_encoder_ctl(m_Encoder, OPUS_SET_LSB_DEPTH(16));
+    opus_encoder_ctl(m_Encoder, OPUS_SET_DTX(0));
     opus_encoder_ctl(m_Encoder, OPUS_SET_INBAND_FEC(1));
     opus_encoder_ctl(m_Encoder, OPUS_SET_PACKET_LOSS_PERC(5));
     opus_encoder_ctl(m_Encoder, OPUS_SET_EXPERT_FRAME_DURATION(OPUS_FRAMESIZE_20_MS));
@@ -94,8 +96,12 @@ bool MicrophoneCapture::initialize(const std::string& deviceName)
     }
 
     SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
-                "Microphone capture device: %s",
-                selectedDevice != nullptr ? selectedDevice : "<default>");
+                "Microphone capture device: %s (%d Hz, %d channels, format 0x%x, %d sample callback target)",
+                selectedDevice != nullptr ? selectedDevice : "<default>",
+                m_ObtainedSpec.freq,
+                m_ObtainedSpec.channels,
+                m_ObtainedSpec.format,
+                m_ObtainedSpec.samples);
 
     if (m_ObtainedSpec.freq != kSampleRate ||
             m_ObtainedSpec.channels != kChannels ||
@@ -106,6 +112,14 @@ bool MicrophoneCapture::initialize(const std::string& deviceName)
                     m_ObtainedSpec.channels,
                     m_ObtainedSpec.format);
         return false;
+    }
+
+    if (m_ObtainedSpec.samples != kFrameSize) {
+        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                    "Microphone capture backend is delivering %d-sample callbacks; outgoing Opus packets will be paced at %d-sample (%d ms) intervals",
+                    m_ObtainedSpec.samples,
+                    kFrameSize,
+                    (kFrameSize * 1000) / kSampleRate);
     }
 
     SDL_PauseAudioDevice(m_DeviceId, 1);
@@ -193,6 +207,9 @@ void MicrophoneCapture::handleAudioData(const Uint8* stream, int len)
 void MicrophoneCapture::encoderLoop()
 {
     std::vector<opus_int16> frame(kFrameSize);
+    const auto frameDuration = std::chrono::milliseconds((kFrameSize * 1000) / kSampleRate);
+    auto nextSendDeadline = std::chrono::steady_clock::now();
+    bool pacingActive = false;
 
     for (;;) {
         {
@@ -207,12 +224,29 @@ void MicrophoneCapture::encoderLoop()
             }
 
             if (!m_Streaming.load(std::memory_order_acquire) || m_SampleBuffer.size() < (size_t)kFrameSize) {
+                pacingActive = false;
                 continue;
             }
 
             std::copy_n(m_SampleBuffer.begin(), kFrameSize, frame.begin());
             m_SampleBuffer.erase(m_SampleBuffer.begin(), m_SampleBuffer.begin() + kFrameSize);
         }
+
+        const auto now = std::chrono::steady_clock::now();
+        if (!pacingActive) {
+            nextSendDeadline = now;
+            pacingActive = true;
+        }
+        else if (now > nextSendDeadline + (frameDuration * 2)) {
+            // Re-sync the pacing clock after a long capture gap to avoid compounding stale latency.
+            nextSendDeadline = now;
+        }
+
+        if (nextSendDeadline > now) {
+            std::this_thread::sleep_until(nextSendDeadline);
+        }
+
+        nextSendDeadline += frameDuration;
 
         int encodedBytes = opus_encode(m_Encoder,
                                        frame.data(),
@@ -232,7 +266,7 @@ void MicrophoneCapture::encoderLoop()
         }
         else if (sendResult < 0) {
             SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-                        "LiSendMicrophoneOpusData() failed for microphone capture");
+                        "LiSendMicrophoneOpusDataEx() failed for microphone capture");
         }
     }
 }
