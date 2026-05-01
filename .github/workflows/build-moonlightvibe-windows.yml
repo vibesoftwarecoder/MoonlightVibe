@@ -52,7 +52,7 @@ jobs:
         run: |
           $src = Get-ChildItem "build\installer-x64-Release\MoonlightVibePortable-*.zip" | Select-Object -First 1
           $dst = "build\installer-x64-Release\MoonlightVibe-windows-x64-${{ steps.version.outputs.version }}.zip"
-          Rename-Item $src.FullName $dst
+          Move-Item $src.FullName $dst
           echo "ZIP_PATH=$dst" >> $env:GITHUB_ENV
 
       - name: Upload artifact
