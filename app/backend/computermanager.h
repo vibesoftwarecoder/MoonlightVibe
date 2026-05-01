@@ -1,6 +1,7 @@
 #pragma once
 
 #include "nvcomputer.h"
+#include "multiseatdiscovery.h"
 #include "settings/streamingpreferences.h"
 #include "settings/compatfetcher.h"
 
@@ -279,6 +280,7 @@ private:
     QMdnsEngine::Browser* m_MdnsBrowser;
     QVector<MdnsPendingComputer*> m_PendingResolution;
     CompatFetcher m_CompatFetcher;
+    MultiSeatDiscovery* m_MultiSeatDiscovery;
     DelayedFlushThread* m_DelayedFlushThread;
     QMutex m_DelayedFlushMutex; // Lock ordering: Must never be acquired while holding NvComputer lock
     QWaitCondition m_DelayedFlushCondition;
