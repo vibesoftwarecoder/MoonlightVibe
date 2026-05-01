@@ -1,0 +1,63 @@
+---
+name: Build - MoonlightVibe Windows x64
+
+on:
+  push:
+    branches:
+      - moonlightvibe-dev
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-2025
+    env:
+      QT_VERSION: 6.11.0
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+        with:
+          submodules: 'recursive'
+          fetch-depth: 1
+
+      - name: Install Qt x64
+        uses: jurplel/install-qt-action@v4
+        with:
+          cache: true
+          version: ${{ env.QT_VERSION }}
+          aqtsource: 'git+https://github.com/miurahr/aqtinstall.git@073e34d7c2ab4ae6961ed7cca690b3abd5ba5a7e'
+
+      - name: Set version
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(cat app/version.txt)
+          SHA=$(echo "$GITHUB_SHA" | cut -c1-6)
+          echo "version=${VERSION}-${SHA}" >> "$GITHUB_OUTPUT"
+          echo "CI_VERSION=${VERSION}-${SHA}" >> "$GITHUB_ENV"
+
+      - name: Build x64
+        shell: cmd
+        run: |
+          set "PATH=%QT_PATH%;%PATH%"
+          scripts\build-arch.bat Release x64
+        env:
+          QT_PATH: ${{ runner.workspace }}\Qt\${{ env.QT_VERSION }}\msvc2022_64\bin
+
+      - name: Rename portable zip
+        shell: pwsh
+        run: |
+          $src = Get-ChildItem "build\installer-x64-Release\MoonlightPortable-*.zip" | Select-Object -First 1
+          $dst = "build\installer-x64-Release\MoonlightVibe-windows-x64-${{ steps.version.outputs.version }}.zip"
+          Rename-Item $src.FullName $dst
+          echo "ZIP_PATH=$dst" >> $env:GITHUB_ENV
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: MoonlightVibe-windows-x64-${{ steps.version.outputs.version }}
+          path: ${{ env.ZIP_PATH }}
+          if-no-files-found: error
