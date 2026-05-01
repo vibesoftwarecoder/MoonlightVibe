@@ -2,10 +2,10 @@ QT += core quick network quickcontrols2 svg
 CONFIG += c++17
 
 unix:!macx {
-    TARGET = moonlight
+    TARGET = moonlightvibe
 } else {
     # On macOS, this is the name displayed in the global menu bar
-    TARGET = Moonlight
+    TARGET = MoonlightVibe
 }
 
 include(../globaldefs.pri)
@@ -168,6 +168,7 @@ SOURCES += \
     backend/nvhttp.cpp \
     backend/nvpairingmanager.cpp \
     backend/computermanager.cpp \
+    backend/multiseatdiscovery.cpp \
     backend/boxartmanager.cpp \
     backend/richpresencemanager.cpp \
     cli/commandlineparser.cpp \
@@ -213,6 +214,7 @@ HEADERS += \
     backend/nvhttp.h \
     backend/nvpairingmanager.h \
     backend/computermanager.h \
+    backend/multiseatdiscovery.h \
     backend/boxartmanager.h \
     backend/richpresencemanager.h \
     cli/commandlineparser.h \
@@ -536,9 +538,9 @@ unix:!macx: {
 }
 win32 {
     RC_ICONS = moonlight.ico
-    QMAKE_TARGET_COMPANY = Moonlight Game Streaming Project
-    QMAKE_TARGET_DESCRIPTION = Moonlight Game Streaming Client
-    QMAKE_TARGET_PRODUCT = Moonlight
+    QMAKE_TARGET_COMPANY = Vibe Software
+    QMAKE_TARGET_DESCRIPTION = MoonlightVibe Game Streaming Client
+    QMAKE_TARGET_PRODUCT = MoonlightVibe
 
     CONFIG -= embed_manifest_exe
     QMAKE_LFLAGS += /MANIFEST:embed /MANIFESTINPUT:$${PWD}/Moonlight.exe.manifest

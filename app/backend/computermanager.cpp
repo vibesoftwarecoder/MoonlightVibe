@@ -163,6 +163,7 @@ ComputerManager::ComputerManager(StreamingPreferences* prefs)
       m_PollingRef(0),
       m_MdnsBrowser(nullptr),
       m_CompatFetcher(nullptr),
+      m_MultiSeatDiscovery(nullptr),
       m_NeedsDelayedFlush(false)
 {
     QSettings settings;
@@ -383,6 +384,14 @@ void ComputerManager::startPolling()
     else {
         qWarning() << "mDNS is disabled by user preference";
     }
+
+    // Start MultiSeat seat auto-discovery
+    m_MultiSeatDiscovery = new MultiSeatDiscovery(this);
+    connect(m_MultiSeatDiscovery, &MultiSeatDiscovery::seatFound,
+            this, [this](QString host, uint16_t port, QString name) {
+        addNewHost(NvAddress(host, port), false, name);
+    });
+    m_MultiSeatDiscovery->start();
 
     // Start polling threads for each known host
     QMapIterator<QString, NvComputer*> i(m_KnownHosts);
@@ -713,6 +722,13 @@ void ComputerManager::stopPollingAsync()
         MdnsPendingComputer* computer = m_PendingResolution.first();
         computer->deleteLater();
         m_PendingResolution.removeFirst();
+    }
+
+    // Stop MultiSeat discovery
+    if (m_MultiSeatDiscovery != nullptr) {
+        m_MultiSeatDiscovery->stop();
+        m_MultiSeatDiscovery->deleteLater();
+        m_MultiSeatDiscovery = nullptr;
     }
 
     // Delete the browser and server to stop discovery and refresh polling
