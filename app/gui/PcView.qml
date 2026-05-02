@@ -216,6 +216,17 @@ CenteredGridView {
                         showPcDetailsDialog.open()
                     }
                 }
+                NavigableMenuItem {
+                    text: qsTr("Stream Settings")
+                    onTriggered: {
+                        var prefs = computerModel.getSeatStreamPrefs(index)
+                        seatStreamSettingsDialog.pcIndex = index
+                        seatStreamSettingsDialog.pcName = model.name
+                        seatStreamSettingsDialog.bitrateKbps = prefs.bitrateKbps
+                        seatStreamSettingsDialog.codecIndex = prefs.videoCodecConfig < 0 ? 0 : prefs.videoCodecConfig + 1
+                        seatStreamSettingsDialog.open()
+                    }
+                }
             }
         }
 
@@ -398,6 +409,68 @@ CenteredGridView {
         text: showPcDetailsDialog.pcDetails
         imageSrc: "qrc:/res/baseline-help_outline-24px.svg"
         standardButtons: Dialog.Ok
+    }
+
+    NavigableDialog {
+        id: seatStreamSettingsDialog
+        property string pcName: ""
+        property int pcIndex: -1
+        property int bitrateKbps: 0
+        property int codecIndex: 0
+
+        standardButtons: Dialog.Ok | Dialog.Cancel
+
+        onOpened: {
+            bitrateField.text = seatStreamSettingsDialog.bitrateKbps > 0 ? seatStreamSettingsDialog.bitrateKbps : ""
+            codecCombo.currentIndex = seatStreamSettingsDialog.codecIndex
+        }
+
+        onAccepted: {
+            var bitrate = parseInt(bitrateField.text) || 0
+            var codec = codecCombo.currentIndex === 0 ? -1 : codecCombo.currentIndex - 1
+            computerModel.setSeatStreamPrefs(seatStreamSettingsDialog.pcIndex, bitrate, codec)
+        }
+
+        ColumnLayout {
+            spacing: 8
+
+            Label {
+                text: qsTr("Stream settings for %1").arg(seatStreamSettingsDialog.pcName)
+                font.bold: true
+                Layout.fillWidth: true
+            }
+
+            Label {
+                text: qsTr("Bitrate (Kbps) — leave blank to use global setting:")
+                font.pointSize: 11
+            }
+
+            TextField {
+                id: bitrateField
+                placeholderText: qsTr("e.g. 20000 (blank = global)")
+                inputMethodHints: Qt.ImhDigitsOnly
+                validator: IntValidator { bottom: 0; top: 150000 }
+                Layout.fillWidth: true
+                Keys.onReturnPressed: seatStreamSettingsDialog.accept()
+            }
+
+            Label {
+                text: qsTr("Video codec:")
+                font.pointSize: 11
+            }
+
+            AutoResizingComboBox {
+                id: codecCombo
+                Layout.fillWidth: true
+                model: ListModel {
+                    ListElement { text: "Global default" }
+                    ListElement { text: "Auto" }
+                    ListElement { text: "H.264" }
+                    ListElement { text: "HEVC (H.265)" }
+                    ListElement { text: "AV1" }
+                }
+            }
+        }
     }
 
     ScrollBar.vertical: ScrollBar {}

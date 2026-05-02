@@ -116,6 +116,20 @@ public:
     };
     Q_ENUM(CaptureSysKeysMode);
 
+    // New entries must go at the end to avoid renumbering existing entries.
+    enum GamepadQuitCombo
+    {
+        GQC_DEFAULT,          // Start + Select + L1 + R1
+        GQC_SELECT_L1_R1_X,   // Select + L1 + R1 + X
+        GQC_SELECT_L1_R1_Y,   // Select + L1 + R1 + Y
+        GQC_START_L1_R1_A,    // Start + L1 + R1 + A
+        GQC_START_L1_R1_B,    // Start + L1 + R1 + B
+        GQC_L1_R1_X_Y,        // L1 + R1 + X + Y
+        GQC_L1_R1_A_B,        // L1 + R1 + A + B
+        GQC_DISABLED,         // Disabled
+    };
+    Q_ENUM(GamepadQuitCombo);
+
     Q_PROPERTY(int width MEMBER width NOTIFY displayModeChanged)
     Q_PROPERTY(int height MEMBER height NOTIFY displayModeChanged)
     Q_PROPERTY(int fps MEMBER fps NOTIFY displayModeChanged)
@@ -159,6 +173,7 @@ public:
     Q_PROPERTY(bool keepAwake MEMBER keepAwake NOTIFY keepAwakeChanged)
     Q_PROPERTY(CaptureSysKeysMode captureSysKeysMode MEMBER captureSysKeysMode NOTIFY captureSysKeysModeChanged)
     Q_PROPERTY(Language language MEMBER language NOTIFY languageChanged);
+    Q_PROPERTY(GamepadQuitCombo gamepadQuitCombo MEMBER gamepadQuitCombo NOTIFY gamepadQuitComboChanged)
 
     Q_INVOKABLE bool retranslate();
     Q_INVOKABLE void refreshMicrophoneDevices();
@@ -211,6 +226,7 @@ public:
     UIDisplayMode uiDisplayMode;
     Language language;
     CaptureSysKeysMode captureSysKeysMode;
+    GamepadQuitCombo gamepadQuitCombo;
 
 signals:
     void displayModeChanged();
@@ -254,6 +270,7 @@ signals:
     void captureSysKeysModeChanged();
     void keepAwakeChanged();
     void languageChanged();
+    void gamepadQuitComboChanged();
 
 private:
     explicit StreamingPreferences(QQmlEngine *qmlEngine);

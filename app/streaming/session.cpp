@@ -1,6 +1,7 @@
 #include "session.h"
 #include "settings/streamingpreferences.h"
 #include "streaming/streamutils.h"
+#include <QSettings>
 #include "backend/richpresencemanager.h"
 #include "streaming/audio/capture/microphonecapture.h"
 
@@ -660,6 +661,19 @@ bool Session::initialize(QQuickWindow* qtWindow)
 
     m_StreamConfig.fps = m_Preferences->fps;
     m_StreamConfig.bitrate = m_Preferences->bitrateKbps;
+
+    // Apply per-seat stream setting overrides (stored under seatprefs/<uuid>/ in QSettings)
+    if (!m_Computer->uuid.isEmpty()) {
+        QSettings seatSettings;
+        seatSettings.beginGroup(QString("seatprefs/%1").arg(m_Computer->uuid));
+        int seatBitrate = seatSettings.value("bitrate", 0).toInt();
+        int seatCodec   = seatSettings.value("codec", -1).toInt();
+        seatSettings.endGroup();
+        if (seatBitrate > 0)
+            m_StreamConfig.bitrate = seatBitrate;
+        if (seatCodec >= 0)
+            m_Preferences->videoCodecConfig = static_cast<StreamingPreferences::VideoCodecConfig>(seatCodec);
+    }
 
 #ifndef STEAM_LINK
     // Opt-in to all encryption features if we detect that the platform

@@ -363,8 +363,20 @@ void SdlInputHandler::handleControllerButtonEvent(SDL_ControllerButtonEvent* eve
         }
     }
 
-    // Handle Start+Select+L1+R1 as a gamepad quit combo
-    if (state->buttons == (PLAY_FLAG | BACK_FLAG | LB_FLAG | RB_FLAG) && qgetenv("NO_GAMEPAD_QUIT") != "1") {
+    // Resolve the configurable quit combo to button flags
+    uint32_t quitCombo = 0;
+    switch (m_GamepadQuitCombo) {
+    case StreamingPreferences::GQC_SELECT_L1_R1_X:  quitCombo = BACK_FLAG | LB_FLAG | RB_FLAG | X_FLAG; break;
+    case StreamingPreferences::GQC_SELECT_L1_R1_Y:  quitCombo = BACK_FLAG | LB_FLAG | RB_FLAG | Y_FLAG; break;
+    case StreamingPreferences::GQC_START_L1_R1_A:   quitCombo = PLAY_FLAG | LB_FLAG | RB_FLAG | A_FLAG; break;
+    case StreamingPreferences::GQC_START_L1_R1_B:   quitCombo = PLAY_FLAG | LB_FLAG | RB_FLAG | B_FLAG; break;
+    case StreamingPreferences::GQC_L1_R1_X_Y:       quitCombo = LB_FLAG | RB_FLAG | X_FLAG | Y_FLAG; break;
+    case StreamingPreferences::GQC_L1_R1_A_B:       quitCombo = LB_FLAG | RB_FLAG | A_FLAG | B_FLAG; break;
+    case StreamingPreferences::GQC_DISABLED:         quitCombo = 0; break;
+    default: /* GQC_DEFAULT */                       quitCombo = PLAY_FLAG | BACK_FLAG | LB_FLAG | RB_FLAG; break;
+    }
+
+    if (quitCombo != 0 && state->buttons == quitCombo && qgetenv("NO_GAMEPAD_QUIT") != "1") {
         SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
                     "Detected quit gamepad button combo");
 

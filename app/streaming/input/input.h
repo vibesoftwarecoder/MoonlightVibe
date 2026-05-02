@@ -222,6 +222,7 @@ private:
     QString m_OldIgnoreDevicesExcept;
     QStringList m_IgnoreDeviceGuids;
     StreamingPreferences::CaptureSysKeysMode m_CaptureSystemKeysMode;
+    StreamingPreferences::GamepadQuitCombo m_GamepadQuitCombo;
     int m_MouseCursorCapturedVisibilityState;
 
     struct {

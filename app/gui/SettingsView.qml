@@ -1614,6 +1614,45 @@ Flickable {
                     ToolTip.visible: hovered
                     ToolTip.text: qsTr("Allows MoonlightVibe to capture gamepad inputs even if it's not the current window in focus")
                 }
+
+                Row {
+                    width: parent.width
+                    spacing: 5
+
+                    Label {
+                        text: qsTr("Gamepad quit combo:")
+                        font.pointSize: 12
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+
+                    AutoResizingComboBox {
+                        id: gamepadQuitComboBox
+                        font.pointSize: 12
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        model: ListModel {
+                            ListElement { text: "Start + Select + L1 + R1 (default)" }
+                            ListElement { text: "Select + L1 + R1 + X" }
+                            ListElement { text: "Select + L1 + R1 + Y" }
+                            ListElement { text: "Start + L1 + R1 + A" }
+                            ListElement { text: "Start + L1 + R1 + B" }
+                            ListElement { text: "L1 + R1 + X + Y" }
+                            ListElement { text: "L1 + R1 + A + B" }
+                            ListElement { text: "Disabled" }
+                        }
+
+                        Component.onCompleted: currentIndex = StreamingPreferences.gamepadQuitCombo
+                        onActivated: {
+                            StreamingPreferences.gamepadQuitCombo = currentIndex
+                            StreamingPreferences.save()
+                        }
+
+                        ToolTip.delay: 1000
+                        ToolTip.timeout: 5000
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Choose which gamepad button combination exits the stream. Use an alternative if the default conflicts with your device.")
+                    }
+                }
             }
         }
 

@@ -2,6 +2,7 @@
 #include "streaming/session.h"
 
 #include <QAbstractListModel>
+#include <QVariantMap>
 
 class ComputerModel : public QAbstractListModel
 {
@@ -16,7 +17,8 @@ class ComputerModel : public QAbstractListModel
         WakeableRole,
         StatusUnknownRole,
         ServerSupportedRole,
-        DetailsRole
+        DetailsRole,
+        UUIDRole
     };
 
 public:
@@ -44,6 +46,10 @@ public:
     Q_INVOKABLE void renameComputer(int computerIndex, QString name);
 
     Q_INVOKABLE Session* createSessionForCurrentGame(int computerIndex);
+
+    Q_INVOKABLE QVariantMap getSeatStreamPrefs(int computerIndex);
+
+    Q_INVOKABLE void setSeatStreamPrefs(int computerIndex, int bitrateKbps, int videoCodecConfig);
 
 signals:
     void pairingCompleted(QVariant error);
