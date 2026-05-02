@@ -1,6 +1,11 @@
 #include "computermodel.h"
 
+#include <QSettings>
 #include <QThreadPool>
+
+#define SER_SEATPREFS "seatprefs"
+#define SER_SEAT_BITRATE "bitrate"
+#define SER_SEAT_CODEC "codec"
 
 ComputerModel::ComputerModel(QObject* object)
     : QAbstractListModel(object) {}
@@ -42,6 +47,8 @@ QVariant ComputerModel::data(const QModelIndex& index, int role) const
         return computer->state == NvComputer::CS_UNKNOWN;
     case ServerSupportedRole:
         return computer->isSupportedServerVersion;
+    case UUIDRole:
+        return computer->uuid;
     case DetailsRole: {
         QString state, pairState;
 
@@ -110,6 +117,7 @@ QHash<int, QByteArray> ComputerModel::roleNames() const
     names[StatusUnknownRole] = "statusUnknown";
     names[ServerSupportedRole] = "serverSupported";
     names[DetailsRole] = "details";
+    names[UUIDRole] = "uuid";
 
     return names;
 }
@@ -132,6 +140,32 @@ Session* ComputerModel::createSessionForCurrentGame(int computerIndex)
     // We have a current running app but it's not in our app list
     Q_ASSERT(false);
     return nullptr;
+}
+
+QVariantMap ComputerModel::getSeatStreamPrefs(int computerIndex)
+{
+    Q_ASSERT(computerIndex < m_Computers.count());
+    QString uuid = m_Computers[computerIndex]->uuid;
+
+    QSettings settings;
+    settings.beginGroup(QString("%1/%2").arg(SER_SEATPREFS, uuid));
+    QVariantMap prefs;
+    prefs["bitrateKbps"] = settings.value(SER_SEAT_BITRATE, 0).toInt();
+    prefs["videoCodecConfig"] = settings.value(SER_SEAT_CODEC, -1).toInt();
+    settings.endGroup();
+    return prefs;
+}
+
+void ComputerModel::setSeatStreamPrefs(int computerIndex, int bitrateKbps, int videoCodecConfig)
+{
+    Q_ASSERT(computerIndex < m_Computers.count());
+    QString uuid = m_Computers[computerIndex]->uuid;
+
+    QSettings settings;
+    settings.beginGroup(QString("%1/%2").arg(SER_SEATPREFS, uuid));
+    settings.setValue(SER_SEAT_BITRATE, bitrateKbps);
+    settings.setValue(SER_SEAT_CODEC, videoCodecConfig);
+    settings.endGroup();
 }
 
 void ComputerModel::deleteComputer(int computerIndex)
