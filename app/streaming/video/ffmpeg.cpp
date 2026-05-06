@@ -676,7 +676,7 @@ bool FFmpegVideoDecoder::completeInitialization(const AVCodec* decoder, enum AVP
 #endif
             if (err == AVERROR(EAGAIN)) {
                 // Wait a little while to let the hardware work
-                SDL_Delay(100);
+                SDL_Delay(15);
             }
             else {
                 // Done!
