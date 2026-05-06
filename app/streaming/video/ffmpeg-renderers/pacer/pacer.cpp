@@ -18,7 +18,7 @@
 // that the sum of all queued frames between both pacing and rendering queues
 // must not exceed the number buffer pool size to avoid running the decoder
 // out of available decoding surfaces.
-#define MAX_QUEUED_FRAMES 3
+#define MAX_QUEUED_FRAMES 2
 static_assert(PACER_MAX_OUTSTANDING_FRAMES == MAX_QUEUED_FRAMES + 2,
               "PACER_MAX_OUTSTANDING_FRAMES and MAX_QUEUED_FRAMES must agree");
 
