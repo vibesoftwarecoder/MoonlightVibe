@@ -8,10 +8,10 @@
 #include <QWaitCondition>
 
 // The maximum number of frames pacer will ever hold is:
-// - 3 frames in the pacing queue
+// - 2 frames in the pacing queue (reduced from 3 for lower LAN buffering latency)
 // - 1 frame removed from the render queue in the process of rendering
 // - 1 frame for deferred free
-#define PACER_MAX_OUTSTANDING_FRAMES (3 + 1 + 1)
+#define PACER_MAX_OUTSTANDING_FRAMES (2 + 1 + 1)
 
 class IVsyncSource {
 public:
