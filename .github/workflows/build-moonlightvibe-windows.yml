@@ -23,6 +23,9 @@ jobs:
           submodules: 'recursive'
           fetch-depth: 1
 
+      - name: Download dependencies
+        run: powershell ./setup-deps.ps1
+
       - name: Install Qt x64
         uses: jurplel/install-qt-action@v4
         with:
