@@ -1,0 +1,78 @@
+---
+name: Build - MoonlightVibe macOS
+
+on:
+  push:
+    branches:
+      - moonlightvibe-dev
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-15
+    env:
+      QT_VERSION: 6.11.1
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+        with:
+          submodules: 'recursive'
+          fetch-depth: 1
+
+      - name: Install create-dmg
+        run: |
+          brew install node
+          npm install --global create-dmg
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          cache: true
+          set-env: true
+          add-tools-to-path: true
+          version: ${{ env.QT_VERSION }}
+          aqtsource: 'git+https://github.com/miurahr/aqtinstall.git@073e34d7c2ab4ae6961ed7cca690b3abd5ba5a7e'
+
+      - name: Set version
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(cat app/version.txt)
+          SHA=$(echo "$GITHUB_SHA" | cut -c1-6)
+          echo "version=${VERSION}-${SHA}" >> "$GITHUB_OUTPUT"
+          echo "CI_VERSION=${VERSION}-${SHA}" >> "$GITHUB_ENV"
+
+      - name: Build and package
+        run: bash scripts/generate-dmg.sh Release
+
+      - name: Rename DMG
+        shell: bash
+        run: |
+          SRC=$(ls build/installer-Release/*.dmg | head -1)
+          DST="build/installer-Release/MoonlightVibe-mac-${{ steps.version.outputs.version }}.dmg"
+          mv "$SRC" "$DST"
+          echo "DMG_PATH=$DST" >> "$GITHUB_ENV"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: MoonlightVibe-mac-${{ steps.version.outputs.version }}
+          path: ${{ env.DMG_PATH }}
+          compression-level: 0
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: github.event_name == 'push'
+        with:
+          tag_name: moonlightvibe-mac-${{ steps.version.outputs.version }}
+          name: MoonlightVibe macOS ${{ steps.version.outputs.version }}
+          files: ${{ env.DMG_PATH }}
+          body: |
+            MoonlightVibe macOS build — rebased onto moonlight-stream/moonlight-qt upstream.
+
+            Includes all MoonlightVibe patches: mic passthrough, per-seat stream settings, latency tuning, and configurable gamepad quit combo.
