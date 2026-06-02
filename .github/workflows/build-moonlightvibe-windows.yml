@@ -64,3 +64,15 @@ jobs:
           name: MoonlightVibe-windows-x64-${{ steps.version.outputs.version }}
           path: ${{ env.ZIP_PATH }}
           if-no-files-found: error
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: github.event_name == 'push'
+        with:
+          tag_name: moonlightvibe-win-${{ steps.version.outputs.version }}
+          name: MoonlightVibe Windows ${{ steps.version.outputs.version }}
+          files: ${{ env.ZIP_PATH }}
+          body: |
+            MoonlightVibe Windows build — rebased onto moonlight-stream/moonlight-qt upstream.
+
+            Includes all MoonlightVibe patches: mic passthrough, per-seat stream settings, latency tuning, and configurable gamepad quit combo.
