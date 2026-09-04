@@ -1,0 +1,113 @@
+name: Bug report
+description: Something is wrong with the MoonlightVibe client.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        MoonlightVibe is a Moonlight fork, built as the companion client for
+        [MultiSeat](https://github.com/vibesoftwarecoder/MultiSeat). It adds microphone
+        passthrough on top of upstream Moonlight.
+
+        **Please check where the problem actually is before filing:**
+
+        - It also happens on stock [Moonlight](https://github.com/moonlight-stream/moonlight-qt) →
+          report it upstream to moonlight-stream, not here.
+        - The picture, the encoder or the host audio is wrong → that is the host side,
+          [ApolloVibe](https://github.com/vibesoftwarecoder/Apollo/issues).
+        - A seat will not provision, or a seat streams the wrong desktop →
+          [MultiSeat](https://github.com/vibesoftwarecoder/MultiSeat/issues).
+
+  - type: input
+    id: version
+    attributes:
+      label: MoonlightVibe version
+      placeholder: v6.2.1
+    validations:
+      required: true
+
+  - type: dropdown
+    id: also-upstream
+    attributes:
+      label: Does this also happen on stock Moonlight?
+      description: >
+        The single most useful thing you can tell us. If stock Moonlight has the same problem it
+        belongs upstream, and we would only be duplicating their work.
+      options:
+        - "No — stock Moonlight is fine, only MoonlightVibe does this"
+        - "Yes — stock Moonlight does it too"
+        - "I have not tried stock Moonlight"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: host
+    attributes:
+      label: What are you streaming from?
+      options:
+        - A MultiSeat seat
+        - ApolloVibe on the console
+        - Standalone Apollo
+        - Sunshine
+        - Other or not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you expected, and what you got instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+
+  - type: textarea
+    id: mic
+    attributes:
+      label: If this is a microphone problem
+      description: >
+        Microphone passthrough is the main thing this fork adds, so it gets its own questions.
+        On the host, ApolloVibe renders your mic into the **Speakers (Steam Streaming
+        Microphone)** playback device, and applications capture from **Microphone (Steam Streaming
+        Microphone)**. Those are two different endpoints and they are easy to mix up.
+      value: |
+        - Is `stream_mic` enabled in the host's config? (it defaults to off)
+        - Does the host show "Steam Streaming Microphone" as a recording device?
+        - Which client microphone did you select?
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Client log
+      description: |
+        Please attach the file. `Moonlight-###.log` lives in `%TEMP%` on Windows and `/tmp` on
+        macOS. On Linux, run the client from a terminal and copy what it prints.
+
+        If the host is ApolloVibe or a MultiSeat seat, its log helps too — see the
+        [ApolloVibe bug template](https://github.com/vibesoftwarecoder/Apollo/issues/new/choose)
+        for where those live.
+      render: text
+
+  - type: textarea
+    id: client-details
+    attributes:
+      label: Client details
+      value: |
+        - OS and version:
+        - GPU:
+        - Decoder / renderer setting if changed from default:
+        - Wired or Wi-Fi:
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else

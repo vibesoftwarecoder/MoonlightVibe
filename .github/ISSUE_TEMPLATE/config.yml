@@ -1,1 +1,13 @@
-blank_issues_enabled: false
+blank_issues_enabled: true
+contact_links:
+  - name: Stock Moonlight (moonlight-stream)
+    url: https://github.com/moonlight-stream/moonlight-qt/issues
+    about: >
+      If the problem also happens on stock Moonlight, report it upstream. MoonlightVibe only adds
+      microphone passthrough on top, so general client bugs are theirs to fix.
+  - name: ApolloVibe — the streaming host
+    url: https://github.com/vibesoftwarecoder/Apollo/issues
+    about: Picture, encoder, capture or host audio problems come from the host, not the client.
+  - name: MultiSeat — seats and provisioning
+    url: https://github.com/vibesoftwarecoder/MultiSeat/issues
+    about: A seat that will not start, or one that streams the wrong desktop.

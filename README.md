@@ -6,6 +6,18 @@ It is a fork of [moonlight-stream/moonlight-qt](https://github.com/moonlight-str
 
 ---
 
+## Where to report a problem
+
+| what is wrong | where it goes |
+|---|---|
+| The client itself, or microphone passthrough | **here** |
+| It also happens on stock Moonlight | [moonlight-stream/moonlight-qt](https://github.com/moonlight-stream/moonlight-qt/issues) |
+| Picture, encoder or host audio | [ApolloVibe](https://github.com/vibesoftwarecoder/Apollo/issues) |
+| A seat will not provision | [MultiSeat](https://github.com/vibesoftwarecoder/MultiSeat/issues) |
+
+Please do not take fork-specific problems to the moonlight-stream Discord or issue tracker. They do
+not maintain this fork.
+
 ## What's different from upstream Moonlight
 
 | Feature | MoonlightVibe | Upstream Moonlight |
