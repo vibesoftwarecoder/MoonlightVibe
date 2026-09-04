@@ -5,18 +5,18 @@ body:
   - type: markdown
     attributes:
       value: |
-        MoonlightVibe is a Moonlight fork, built as the companion client for
-        [MultiSeat](https://github.com/vibesoftwarecoder/MultiSeat). It adds microphone
-        passthrough on top of upstream Moonlight.
+        MoonlightVibe is our streaming client — seat auto-discovery, per-seat stream settings,
+        a configurable gamepad quit combo and microphone passthrough, built on Moonlight.
+        **Client problems belong here**, including ones that turn out to come from upstream.
 
-        **Please check where the problem actually is before filing:**
+        Two things are genuinely a different component, and go faster if filed where they live:
 
-        - It also happens on stock [Moonlight](https://github.com/moonlight-stream/moonlight-qt) →
-          report it upstream to moonlight-stream, not here.
         - The picture, the encoder or the host audio is wrong → that is the host side,
           [ApolloVibe](https://github.com/vibesoftwarecoder/Apollo/issues).
         - A seat will not provision, or a seat streams the wrong desktop →
           [MultiSeat](https://github.com/vibesoftwarecoder/MultiSeat/issues).
+
+        If you are not sure which of the three it is, file it here anyway and we will move it.
 
   - type: input
     id: version
@@ -29,16 +29,15 @@ body:
   - type: dropdown
     id: also-upstream
     attributes:
-      label: Does this also happen on stock Moonlight?
+      label: If you happen to have stock Moonlight, does it do this too? (optional)
       description: >
-        The single most useful thing you can tell us. If stock Moonlight has the same problem it
-        belongs upstream, and we would only be duplicating their work.
+        Only answer if you already have it — please do not install another client just to fill
+        this in. It helps us tell a MoonlightVibe regression apart from behaviour inherited from
+        upstream, which changes where we look first. Either way the report stays with us.
       options:
+        - "Not tried, or I do not have stock Moonlight"
         - "No — stock Moonlight is fine, only MoonlightVibe does this"
         - "Yes — stock Moonlight does it too"
-        - "I have not tried stock Moonlight"
-    validations:
-      required: true
 
   - type: dropdown
     id: host
