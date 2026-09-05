@@ -74,6 +74,7 @@ extern "C" {
 #include <Limelight.h>
 
 #include <map>
+#include <unordered_set>
 
 #ifdef HAVE_DRM_MASTER_HOOKS
 extern "C" {
@@ -162,9 +163,6 @@ DrmRenderer::DrmRenderer(AVHWDeviceType hwDeviceType, IFFmpegRenderer *backendRe
       m_OutputRect{},
       m_SwFrameMapper(this),
       m_CurrentSwFrameIdx(0)
-#ifdef HAVE_EGL
-    , m_EglImageFactory(this)
-#endif
 {
     SDL_zero(m_SwFrame);
 }
@@ -1750,6 +1748,7 @@ bool DrmRenderer::addFbForFrame(AVFrame *frame, uint32_t* newFbId, bool testMode
     uint32_t offsets[4] = {};
     uint64_t modifiers[4] = {};
     uint32_t flags = 0;
+    std::unordered_set<uint32_t> handleSet;
 
     // DRM requires composed layers rather than separate layers per plane
     SDL_assert(drmFrame->nb_layers == 1);
@@ -1763,8 +1762,15 @@ bool DrmRenderer::addFbForFrame(AVFrame *frame, uint32_t* newFbId, bool testMode
             SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
                          "drmPrimeFDToHandle() failed: %d",
                          errno);
+            for (uint32_t handle : handleSet) {
+                drmCloseBufferHandle(m_DrmFd, handle);
+            }
             return false;
         }
+
+        // Handles aren't unique for calls with the same FD, so we need to
+        // keep track of only the unique handles to avoid double-closing.
+        handleSet.emplace(handles[i]);
 
         pitches[i] = layer.planes[i].pitch;
         offsets[i] = layer.planes[i].offset;
@@ -1784,6 +1790,12 @@ bool DrmRenderer::addFbForFrame(AVFrame *frame, uint32_t* newFbId, bool testMode
                                      handles, pitches, offsets,
                                      (flags & DRM_MODE_FB_MODIFIERS) ? modifiers : NULL,
                                      newFbId, flags);
+
+    // Handles can be closed immediately after drmModeAddFB2WithModifiers()
+    for (uint32_t handle : handleSet) {
+        drmCloseBufferHandle(m_DrmFd, handle);
+    }
+
     if (err < 0) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
                      "drmModeAddFB2[WithModifiers]() failed: %d",
@@ -2004,6 +2016,22 @@ int DrmRenderer::getDecoderColorspace()
     return COLORSPACE_REC_601;
 }
 
+int DrmRenderer::getDecoderColorRange()
+{
+    if (auto prop = m_VideoPlane.property("COLOR_RANGE")) {
+        // Prefer full range if the video plane supports it
+        if (prop->containsValue("YCbCr full range")) {
+            return COLOR_RANGE_FULL;
+        }
+        else if (prop->containsValue("YCbCr limited range")) {
+            return COLOR_RANGE_LIMITED;
+        }
+    }
+
+    // Default to limited if we couldn't find a valid COLOR_RANGE property
+    return COLOR_RANGE_LIMITED;
+}
+
 const char* DrmRenderer::getDrmColorEncodingValue(AVFrame* frame)
 {
     switch (getFrameColorspace(frame)) {
@@ -2069,9 +2097,10 @@ AVPixelFormat DrmRenderer::getEGLImagePixelFormat() {
     return AV_PIX_FMT_DRM_PRIME;
 }
 
-bool DrmRenderer::initializeEGL(EGLDisplay display,
+bool DrmRenderer::initializeEGL(IFFmpegRenderer* eglRenderer,
+                                EGLDisplay display,
                                 const EGLExtensions &ext) {
-    return m_EglImageFactory.initializeEGL(display, ext);
+    return m_EglImageFactory.initializeEGL(eglRenderer, display, ext);
 }
 
 ssize_t DrmRenderer::exportEGLImages(AVFrame *frame, EGLDisplay dpy,
