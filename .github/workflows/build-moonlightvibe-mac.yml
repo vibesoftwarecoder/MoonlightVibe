@@ -5,6 +5,10 @@ on:
   push:
     branches:
       - master
+    paths-ignore:
+      - '**.md'
+      - '.github/ISSUE_TEMPLATE/**'
+      - 'LICENSE'
   workflow_dispatch:
 
 permissions:
