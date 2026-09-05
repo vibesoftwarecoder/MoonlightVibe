@@ -12,7 +12,7 @@ body:
         Two things are genuinely a different component, and go faster if filed where they live:
 
         - The picture, the encoder or the host audio is wrong → that is the host side,
-          [ApolloVibe](https://github.com/vibesoftwarecoder/Apollo/issues).
+          [ApolloVibe](https://github.com/vibesoftwarecoder/ApolloVibe/issues).
         - A seat will not provision, or a seat streams the wrong desktop →
           [MultiSeat](https://github.com/vibesoftwarecoder/MultiSeat/issues).
 
@@ -90,7 +90,7 @@ body:
         macOS. On Linux, run the client from a terminal and copy what it prints.
 
         If the host is ApolloVibe or a MultiSeat seat, its log helps too — see the
-        [ApolloVibe bug template](https://github.com/vibesoftwarecoder/Apollo/issues/new/choose)
+        [ApolloVibe bug template](https://github.com/vibesoftwarecoder/ApolloVibe/issues/new/choose)
         for where those live.
       render: text
 

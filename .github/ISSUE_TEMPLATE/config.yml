@@ -1,7 +1,7 @@
 blank_issues_enabled: true
 contact_links:
   - name: ApolloVibe — the streaming host
-    url: https://github.com/vibesoftwarecoder/Apollo/issues
+    url: https://github.com/vibesoftwarecoder/ApolloVibe/issues
     about: Picture, encoder, capture or host audio problems come from the host, not the client.
   - name: MultiSeat — seats and provisioning
     url: https://github.com/vibesoftwarecoder/MultiSeat/issues

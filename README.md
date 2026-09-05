@@ -14,7 +14,7 @@ MoonlightVibe is what you installed, so it is ours to answer for.
 | what is wrong | where it goes |
 |---|---|
 | The client: streaming, decoding, seat discovery, gamepad, microphone passthrough | **here** |
-| Picture, encoder or host audio | [ApolloVibe](https://github.com/vibesoftwarecoder/Apollo/issues) |
+| Picture, encoder or host audio | [ApolloVibe](https://github.com/vibesoftwarecoder/ApolloVibe/issues) |
 | A seat will not provision | [MultiSeat](https://github.com/vibesoftwarecoder/MultiSeat/issues) |
 
 Please do not take MoonlightVibe problems to the moonlight-stream Discord or issue tracker. They do
@@ -52,14 +52,14 @@ This works over the LAN too: if you point MoonlightVibe at the MultiSeat host IP
 
 MoonlightVibe streams your microphone to the host and plays it back through `Speakers (Steam Streaming Microphone)`. Games and apps on the host should select `Microphone (Steam Streaming Microphone)` as their input device.
 
-Requires [ApolloVibe](https://github.com/vibesoftwarecoder/Apollo) on the host side with `stream_mic = enabled` in the seat config. MultiSeat enables this automatically.
+Requires [ApolloVibe](https://github.com/vibesoftwarecoder/ApolloVibe) on the host side with `stream_mic = enabled` in the seat config. MultiSeat enables this automatically.
 
 ---
 
 ## Requirements
 
 - Windows 10/11 x64
-- [MultiSeat](https://github.com/vibesoftwarecoder/MultiSeat) + [ApolloVibe](https://github.com/vibesoftwarecoder/Apollo) on the host for full feature support
+- [MultiSeat](https://github.com/vibesoftwarecoder/MultiSeat) + [ApolloVibe](https://github.com/vibesoftwarecoder/ApolloVibe) on the host for full feature support
 - Standard Moonlight-compatible host (e.g. upstream Sunshine) works for basic streaming without mic or auto-discovery
 
 ---
