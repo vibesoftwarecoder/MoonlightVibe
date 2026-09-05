@@ -4,7 +4,7 @@ name: Build - MoonlightVibe Windows x64
 on:
   push:
     branches:
-      - moonlightvibe-dev
+      - master
   workflow_dispatch:
 
 permissions:

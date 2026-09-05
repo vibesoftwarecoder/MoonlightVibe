@@ -4,7 +4,7 @@ name: Build - MoonlightVibe macOS
 on:
   push:
     branches:
-      - moonlightvibe-dev
+      - master
   workflow_dispatch:
 
 permissions:
