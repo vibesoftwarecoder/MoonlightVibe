@@ -1,7 +1,9 @@
 #include "session.h"
 #include "settings/streamingpreferences.h"
 #include "streaming/streamutils.h"
+#include <QSettings>
 #include "backend/richpresencemanager.h"
+#include "streaming/audio/capture/microphonecapture.h"
 
 #include <Limelight.h>
 #include "SDL_compat.h"
@@ -567,7 +569,9 @@ Session::Session(NvComputer* computer, NvApp& app, StreamingPreferences *prefere
       m_OpusDecoder(nullptr),
       m_AudioRenderer(nullptr),
       m_AudioSampleCount(0),
-      m_DropAudioEndTime(0)
+      m_DropAudioEndTime(0),
+      m_MicrophoneCapture(nullptr),
+      m_MicrophoneEnabled(false)
 {
 }
 
@@ -632,6 +636,12 @@ bool Session::initialize(QQuickWindow* qtWindow)
         return false;
     }
 
+    // Stop text input. SDL enables it by default
+    // when we initialize the video subsystem, but this
+    // causes an IME popup when certain keys are held down
+    // on macOS.
+    SDL_StopTextInput();
+
     LiInitializeStreamConfiguration(&m_StreamConfig);
     m_StreamConfig.width = m_Preferences->width;
     m_StreamConfig.height = m_Preferences->height;
@@ -658,6 +668,19 @@ bool Session::initialize(QQuickWindow* qtWindow)
     m_StreamConfig.fps = m_Preferences->fps;
     m_StreamConfig.bitrate = m_Preferences->bitrateKbps;
 
+    // Apply per-seat stream setting overrides (stored under seatprefs/<uuid>/ in QSettings)
+    if (!m_Computer->uuid.isEmpty()) {
+        QSettings seatSettings;
+        seatSettings.beginGroup(QString("seatprefs/%1").arg(m_Computer->uuid));
+        int seatBitrate = seatSettings.value("bitrate", 0).toInt();
+        int seatCodec   = seatSettings.value("codec", -1).toInt();
+        seatSettings.endGroup();
+        if (seatBitrate > 0)
+            m_StreamConfig.bitrate = seatBitrate;
+        if (seatCodec >= 0)
+            m_Preferences->videoCodecConfig = static_cast<StreamingPreferences::VideoCodecConfig>(seatCodec);
+    }
+
 #ifndef STEAM_LINK
     // Opt-in to all encryption features if we detect that the platform
     // has AES cryptography acceleration instructions and more than 2 cores.
@@ -680,6 +703,7 @@ bool Session::initialize(QQuickWindow* qtWindow)
 
     // Only the first 4 bytes are populated in the RI key IV
     RAND_bytes(reinterpret_cast<unsigned char*>(m_StreamConfig.remoteInputAesIv), 4);
+    m_StreamConfig.enableMic = m_Preferences->enableMicrophone;
 
     switch (m_Preferences->audioConfig)
     {
@@ -1754,15 +1778,61 @@ void Session::interrupt()
     SDL_PushEvent(&event);
 }
 
+bool Session::initializeMicrophoneCapture()
+{
+    if (m_MicrophoneCapture != nullptr) {
+        return true;
+    }
+
+    m_MicrophoneCapture = new MicrophoneCapture(this);
+    m_MicrophoneCapture->setEnabled(m_Preferences->enableMicrophone);
+    const std::string microphoneDeviceName = m_Preferences->microphoneDevice.toStdString();
+    if (!m_MicrophoneCapture->initialize(microphoneDeviceName)) {
+        delete m_MicrophoneCapture;
+        m_MicrophoneCapture = nullptr;
+        m_MicrophoneEnabled = false;
+        return false;
+    }
+
+    m_MicrophoneEnabled = true;
+    return true;
+}
+
+void Session::destroyMicrophoneCapture()
+{
+    if (m_MicrophoneCapture != nullptr) {
+        m_MicrophoneCapture->stop();
+        delete m_MicrophoneCapture;
+        m_MicrophoneCapture = nullptr;
+    }
+
+    m_MicrophoneEnabled = false;
+}
+
 void Session::exec()
 {
     // If the connection failed, clean up and abort the connection.
     if (!m_AsyncConnectionSuccess) {
+        destroyMicrophoneCapture();
         delete m_InputHandler;
         m_InputHandler = nullptr;
         SDL_QuitSubSystem(SDL_INIT_VIDEO);
         QThreadPool::globalInstance()->start(new DeferredSessionCleanupTask(this));
         return;
+    }
+
+    if (m_Preferences->enableMicrophone) {
+        if (LiIsMicrophoneStreamActive()) {
+            if (!initializeMicrophoneCapture() || !m_MicrophoneCapture->start()) {
+                SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                            "Microphone capture initialization failed after successful negotiation");
+                destroyMicrophoneCapture();
+            }
+        }
+        else {
+            SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                        "Host did not negotiate microphone streaming; leaving client microphone disabled");
+        }
     }
 
     // Pump the Qt event loop one last time before we create our SDL window
@@ -1845,6 +1915,7 @@ void Session::exec()
                          "SDL_CreateWindow() failed: %s",
                          SDL_GetError());
 
+            destroyMicrophoneCapture();
             delete m_InputHandler;
             m_InputHandler = nullptr;
             SDL_QuitSubSystem(SDL_INIT_VIDEO);
@@ -1888,24 +1959,24 @@ void Session::exec()
     bool needsFirstEnterCapture = false;
     bool needsPostDecoderCreationCapture = false;
 
-    // HACK: For Wayland, we wait until we get the first SDL_WINDOWEVENT_ENTER
-    // event where it seems to work consistently on GNOME. For other platforms,
-    // especially where SDL may call SDL_RecreateWindow(), we must only capture
-    // after the decoder is created.
-    if (strcmp(SDL_GetCurrentVideoDriver(), "wayland") == 0) {
-        // Native Wayland: Capture on SDL_WINDOWEVENT_ENTER
-        needsFirstEnterCapture = true;
+    // Avoid capturing the mouse initially for windowed relative mode.
+    // We still capture in windowed absolute mode because it doesn't
+    // constrain the motion of the cursor. This allows the user to
+    // easily reposition or resize the window.
+    if (m_IsFullScreen || m_Preferences->absoluteMouseMode) {
+        // HACK: For Wayland, we wait until we get the first SDL_WINDOWEVENT_ENTER
+        // event where it seems to work consistently on GNOME. For other platforms,
+        // especially where SDL may call SDL_RecreateWindow(), we must only capture
+        // after the decoder is created.
+        if (strcmp(SDL_GetCurrentVideoDriver(), "wayland") == 0) {
+            // Native Wayland: Capture on SDL_WINDOWEVENT_ENTER
+            needsFirstEnterCapture = true;
+        }
+        else {
+            // X11/XWayland: Capture after decoder creation
+            needsPostDecoderCreationCapture = true;
+        }
     }
-    else {
-        // X11/XWayland: Capture after decoder creation
-        needsPostDecoderCreationCapture = true;
-    }
-
-    // Stop text input. SDL enables it by default
-    // when we initialize the video subsystem, but this
-    // causes an IME popup when certain keys are held down
-    // on macOS.
-    SDL_StopTextInput();
 
     // Disable the screen saver if requested
     if (m_Preferences->keepAwake) {
@@ -2286,6 +2357,8 @@ void Session::exec()
 DispatchDeferredCleanup:
     // Switch back to synchronous logging mode
     StreamUtils::exitAsyncLoggingMode();
+
+    destroyMicrophoneCapture();
 
     // Uncapture the mouse and hide the window immediately,
     // so we can return to the Qt GUI ASAP.

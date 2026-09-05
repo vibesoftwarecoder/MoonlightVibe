@@ -1,4 +1,5 @@
 #include "streamingpreferences.h"
+#include "SDL_compat.h"
 #include "utils.h"
 
 #include <QSettings>
@@ -6,6 +7,7 @@
 #include <QCoreApplication>
 #include <QLocale>
 #include <QReadWriteLock>
+#include <QTimer>
 #include <QtMath>
 
 #include <QtDebug>
@@ -43,6 +45,8 @@
 #define SER_PACKETSIZE "packetsize"
 #define SER_DETECTNETBLOCKING "detectnetblocking"
 #define SER_SHOWPERFOVERLAY "showperfoverlay"
+#define SER_ENABLEMICROPHONE "enablemicrophone"
+#define SER_MICROPHONEDEVICE "microphonedevice"
 #define SER_SWAPMOUSEBUTTONS "swapmousebuttons"
 #define SER_MUTEONFOCUSLOSS "muteonfocusloss"
 #define SER_BACKGROUNDGAMEPAD "backgroundgamepad"
@@ -51,6 +55,7 @@
 #define SER_CAPTURESYSKEYS "capturesyskeys"
 #define SER_KEEPAWAKE "keepawake"
 #define SER_LANGUAGE "language"
+#define SER_GAMEPADQUITCOMBO "gamepadquitcombo"
 
 #define CURRENT_DEFAULT_VER 2
 
@@ -60,8 +65,22 @@ Q_GLOBAL_STATIC(QReadWriteLock, s_GlobalPrefsLock)
 
 StreamingPreferences::StreamingPreferences(QQmlEngine *qmlEngine)
     : m_QmlEngine(qmlEngine)
+    , m_MicrophoneMonitorDeviceId(0)
+    , m_MicrophoneMonitorSpec({})
+    , m_MicrophoneMonitorTimer(new QTimer(this))
+    , m_PendingMicrophonePeak(0)
+    , m_MicrophoneMonitorLevel(0.0)
+    , m_MicrophoneMonitorActive(false)
+    , m_MicrophoneMonitorSignalDetected(false)
 {
+    m_MicrophoneMonitorTimer->setInterval(50);
+    connect(m_MicrophoneMonitorTimer, &QTimer::timeout, this, &StreamingPreferences::updateMicrophoneMonitorState);
     reload();
+}
+
+StreamingPreferences::~StreamingPreferences()
+{
+    stopMicrophoneMonitor();
 }
 
 StreamingPreferences* StreamingPreferences::get(QQmlEngine *qmlEngine)
@@ -143,6 +162,8 @@ void StreamingPreferences::reload()
     gamepadMouse = settings.value(SER_GAMEPADMOUSE, true).toBool();
     detectNetworkBlocking = settings.value(SER_DETECTNETBLOCKING, true).toBool();
     showPerformanceOverlay = settings.value(SER_SHOWPERFOVERLAY, false).toBool();
+    enableMicrophone = settings.value(SER_ENABLEMICROPHONE, false).toBool();
+    microphoneDevice = settings.value(SER_MICROPHONEDEVICE, "").toString();
     packetSize = settings.value(SER_PACKETSIZE, 0).toInt();
     swapMouseButtons = settings.value(SER_SWAPMOUSEBUTTONS, false).toBool();
     muteOnFocusLoss = settings.value(SER_MUTEONFOCUSLOSS, false).toBool();
@@ -151,6 +172,8 @@ void StreamingPreferences::reload()
     swapFaceButtons = settings.value(SER_SWAPFACEBUTTONS, false).toBool();
     keepAwake = settings.value(SER_KEEPAWAKE, true).toBool();
     enableHdr = settings.value(SER_HDR, false).toBool();
+    gamepadQuitCombo = static_cast<GamepadQuitCombo>(settings.value(SER_GAMEPADQUITCOMBO,
+                                                     static_cast<int>(GamepadQuitCombo::GQC_DEFAULT)).toInt());
     captureSysKeysMode = static_cast<CaptureSysKeysMode>(settings.value(SER_CAPTURESYSKEYS,
                                                          static_cast<int>(CaptureSysKeysMode::CSK_OFF)).toInt());
     audioConfig = static_cast<AudioConfig>(settings.value(SER_AUDIOCFG,
@@ -190,6 +213,8 @@ void StreamingPreferences::reload()
         videoCodecConfig = VCC_AUTO;
         enableHdr = true;
     }
+
+    refreshMicrophoneDevices();
 }
 
 bool StreamingPreferences::retranslate()
@@ -342,6 +367,8 @@ void StreamingPreferences::save()
     settings.setValue(SER_PACKETSIZE, packetSize);
     settings.setValue(SER_DETECTNETBLOCKING, detectNetworkBlocking);
     settings.setValue(SER_SHOWPERFOVERLAY, showPerformanceOverlay);
+    settings.setValue(SER_ENABLEMICROPHONE, enableMicrophone);
+    settings.setValue(SER_MICROPHONEDEVICE, microphoneDevice);
     settings.setValue(SER_AUDIOCFG, static_cast<int>(audioConfig));
     settings.setValue(SER_HDR, enableHdr);
     settings.setValue(SER_YUV444, enableYUV444);
@@ -358,6 +385,236 @@ void StreamingPreferences::save()
     settings.setValue(SER_SWAPFACEBUTTONS, swapFaceButtons);
     settings.setValue(SER_CAPTURESYSKEYS, captureSysKeysMode);
     settings.setValue(SER_KEEPAWAKE, keepAwake);
+    settings.setValue(SER_GAMEPADQUITCOMBO, static_cast<int>(gamepadQuitCombo));
+}
+
+QStringList StreamingPreferences::microphoneDevices() const
+{
+    return m_MicrophoneDevices;
+}
+
+double StreamingPreferences::microphoneMonitorLevel() const
+{
+    return m_MicrophoneMonitorLevel;
+}
+
+QString StreamingPreferences::microphoneMonitorStatus() const
+{
+    return m_MicrophoneMonitorStatus;
+}
+
+bool StreamingPreferences::microphoneMonitorSignalDetected() const
+{
+    return m_MicrophoneMonitorSignalDetected;
+}
+
+void StreamingPreferences::refreshMicrophoneDevices()
+{
+    const bool audioWasInitialized = SDL_WasInit(SDL_INIT_AUDIO) != 0;
+    if (!audioWasInitialized && SDL_InitSubSystem(SDL_INIT_AUDIO) != 0) {
+        qWarning() << "Failed to initialize SDL audio for microphone enumeration:" << SDL_GetError();
+        return;
+    }
+
+    QStringList devices;
+    const int deviceCount = SDL_GetNumAudioDevices(SDL_TRUE);
+    for (int i = 0; i < deviceCount; ++i) {
+        const char* name = SDL_GetAudioDeviceName(i, SDL_TRUE);
+        if (name == nullptr || *name == '\0') {
+            continue;
+        }
+
+        const QString deviceName = QString::fromUtf8(name);
+        if (!devices.contains(deviceName)) {
+            devices.append(deviceName);
+        }
+    }
+
+    if (!microphoneDevice.isEmpty() && !devices.contains(microphoneDevice)) {
+        devices.prepend(microphoneDevice);
+    }
+
+    if (!audioWasInitialized) {
+        SDL_QuitSubSystem(SDL_INIT_AUDIO);
+    }
+
+    if (devices != m_MicrophoneDevices) {
+        m_MicrophoneDevices = devices;
+        emit microphoneDevicesChanged();
+    }
+}
+
+void StreamingPreferences::setMicrophoneMonitorActive(bool active)
+{
+    if (m_MicrophoneMonitorActive == active) {
+        if (active) {
+            refreshMicrophoneMonitor();
+        }
+        return;
+    }
+
+    m_MicrophoneMonitorActive = active;
+    if (active) {
+        startMicrophoneMonitor();
+    }
+    else {
+        stopMicrophoneMonitor(tr("Microphone preview inactive"));
+    }
+}
+
+void StreamingPreferences::refreshMicrophoneMonitor()
+{
+    if (!m_MicrophoneMonitorActive) {
+        return;
+    }
+
+    stopMicrophoneMonitor();
+    startMicrophoneMonitor();
+}
+
+void StreamingPreferences::microphoneMonitorCallback(void* userdata, Uint8* stream, int len)
+{
+    auto* prefs = static_cast<StreamingPreferences*>(userdata);
+    if (prefs != nullptr) {
+        prefs->processMicrophoneMonitorData(stream, len);
+    }
+}
+
+bool StreamingPreferences::startMicrophoneMonitor()
+{
+    if (SDL_WasInit(SDL_INIT_AUDIO) == 0 && SDL_InitSubSystem(SDL_INIT_AUDIO) != 0) {
+        setMicrophoneMonitorStatus(tr("Microphone preview unavailable: SDL audio init failed"));
+        return false;
+    }
+
+    SDL_AudioSpec desired = {};
+    desired.freq = 48000;
+    desired.format = AUDIO_S16SYS;
+    desired.channels = 1;
+    desired.samples = 960;
+    desired.callback = &StreamingPreferences::microphoneMonitorCallback;
+    desired.userdata = this;
+
+    const QByteArray deviceNameUtf8 = microphoneDevice.toUtf8();
+    const char* selectedDevice = deviceNameUtf8.isEmpty() ? nullptr : deviceNameUtf8.constData();
+    bool fellBackToDefault = false;
+
+    m_MicrophoneMonitorDeviceId = SDL_OpenAudioDevice(selectedDevice, SDL_TRUE, &desired, &m_MicrophoneMonitorSpec, 0);
+    if (m_MicrophoneMonitorDeviceId == 0 && selectedDevice != nullptr) {
+        m_MicrophoneMonitorDeviceId = SDL_OpenAudioDevice(nullptr, SDL_TRUE, &desired, &m_MicrophoneMonitorSpec, 0);
+        if (m_MicrophoneMonitorDeviceId != 0) {
+            fellBackToDefault = true;
+        }
+    }
+
+    if (m_MicrophoneMonitorDeviceId == 0) {
+        setMicrophoneMonitorStatus(tr("Microphone preview unavailable: could not open the selected input"));
+        return false;
+    }
+
+    if (m_MicrophoneMonitorSpec.freq != desired.freq ||
+            m_MicrophoneMonitorSpec.channels != desired.channels ||
+            m_MicrophoneMonitorSpec.format != desired.format) {
+        stopMicrophoneMonitor(tr("Microphone preview unavailable: the input device does not support 48 kHz mono 16-bit capture"));
+        return false;
+    }
+
+    m_PendingMicrophonePeak.store(0, std::memory_order_release);
+    if (m_MicrophoneMonitorLevel != 0.0) {
+        m_MicrophoneMonitorLevel = 0.0;
+        emit microphoneMonitorLevelChanged();
+    }
+    if (m_MicrophoneMonitorSignalDetected) {
+        m_MicrophoneMonitorSignalDetected = false;
+        emit microphoneMonitorSignalDetectedChanged();
+    }
+
+    if (fellBackToDefault) {
+        setMicrophoneMonitorStatus(tr("Selected microphone unavailable, previewing the system default input"));
+    }
+    else {
+        setMicrophoneMonitorStatus(selectedDevice == nullptr ?
+                                       tr("Previewing the default microphone input") :
+                                       tr("Previewing the selected microphone input"));
+    }
+
+    m_MicrophoneMonitorTimer->start();
+    SDL_PauseAudioDevice(m_MicrophoneMonitorDeviceId, 0);
+    return true;
+}
+
+void StreamingPreferences::stopMicrophoneMonitor(const QString& status)
+{
+    if (m_MicrophoneMonitorTimer->isActive()) {
+        m_MicrophoneMonitorTimer->stop();
+    }
+
+    if (m_MicrophoneMonitorDeviceId != 0) {
+        SDL_PauseAudioDevice(m_MicrophoneMonitorDeviceId, 1);
+        SDL_CloseAudioDevice(m_MicrophoneMonitorDeviceId);
+        m_MicrophoneMonitorDeviceId = 0;
+    }
+
+    m_PendingMicrophonePeak.store(0, std::memory_order_release);
+    if (m_MicrophoneMonitorLevel != 0.0) {
+        m_MicrophoneMonitorLevel = 0.0;
+        emit microphoneMonitorLevelChanged();
+    }
+    if (m_MicrophoneMonitorSignalDetected) {
+        m_MicrophoneMonitorSignalDetected = false;
+        emit microphoneMonitorSignalDetectedChanged();
+    }
+    if (!status.isNull()) {
+        setMicrophoneMonitorStatus(status);
+    }
+}
+
+void StreamingPreferences::processMicrophoneMonitorData(const Uint8* stream, int len)
+{
+    if (stream == nullptr || len <= 0) {
+        return;
+    }
+
+    const auto* samples = reinterpret_cast<const qint16*>(stream);
+    const int sampleCount = len / static_cast<int>(sizeof(qint16));
+    int peak = 0;
+    for (int i = 0; i < sampleCount; ++i) {
+        const int sample = samples[i] < 0 ? -samples[i] : samples[i];
+        if (sample > peak) {
+            peak = sample;
+        }
+    }
+
+    int currentPeak = m_PendingMicrophonePeak.load(std::memory_order_acquire);
+    while (peak > currentPeak &&
+           !m_PendingMicrophonePeak.compare_exchange_weak(currentPeak, peak, std::memory_order_release, std::memory_order_acquire)) {
+    }
+}
+
+void StreamingPreferences::updateMicrophoneMonitorState()
+{
+    const int peak = m_PendingMicrophonePeak.exchange(0, std::memory_order_acq_rel);
+    const double instantaneousLevel = qBound(0.0, peak / 32767.0, 1.0);
+    const double nextLevel = qMax(instantaneousLevel, m_MicrophoneMonitorLevel * 0.72);
+
+    if (!qFuzzyCompare(nextLevel + 1.0, m_MicrophoneMonitorLevel + 1.0)) {
+        m_MicrophoneMonitorLevel = nextLevel;
+        emit microphoneMonitorLevelChanged();
+    }
+
+    const bool signalDetected = nextLevel >= 0.02;
+    if (signalDetected != m_MicrophoneMonitorSignalDetected) {
+        m_MicrophoneMonitorSignalDetected = signalDetected;
+        emit microphoneMonitorSignalDetectedChanged();
+    }
+}
+
+void StreamingPreferences::setMicrophoneMonitorStatus(const QString& status)
+{
+    if (m_MicrophoneMonitorStatus != status) {
+        m_MicrophoneMonitorStatus = status;
+        emit microphoneMonitorStatusChanged();
+    }
 }
 
 int StreamingPreferences::getDefaultBitrate(int width, int height, int fps, bool yuv444)

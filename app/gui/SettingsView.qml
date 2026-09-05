@@ -73,6 +73,7 @@ Flickable {
         // This enables Tab and BackTab based navigation rather than arrow keys.
         // It is required to shift focus between controls on the settings page.
         SdlGamepadKeyNavigation.setUiNavMode(true)
+        StreamingPreferences.setMicrophoneMonitorActive(true)
 
         // Highlight the first item if a gamepad is connected
         if (SdlGamepadKeyNavigation.getConnectedGamepads() > 0) {
@@ -82,6 +83,7 @@ Flickable {
 
     StackView.onDeactivating: {
         SdlGamepadKeyNavigation.setUiNavMode(false)
+        StreamingPreferences.setMicrophoneMonitorActive(false)
 
         // Save the prefs so the Session can observe the changes
         StreamingPreferences.save()
@@ -90,6 +92,7 @@ Flickable {
     Component.onDestruction: {
         // Also save preferences on destruction, since we won't get a
         // deactivating callback if the user just closes Moonlight
+        StreamingPreferences.setMicrophoneMonitorActive(false)
         StreamingPreferences.save()
     }
 
@@ -926,7 +929,7 @@ Flickable {
                 CheckBox {
                     id: muteOnFocusLossCheck
                     width: parent.width
-                    text: qsTr("Mute audio stream when Moonlight is not the active window")
+                    text: qsTr("Mute audio stream when MoonlightVibe is not the active window")
                     font.pointSize: 12
                     visible: SystemProperties.hasDesktopEnvironment
                     checked: StreamingPreferences.muteOnFocusLoss
@@ -937,7 +940,107 @@ Flickable {
                     ToolTip.delay: 1000
                     ToolTip.timeout: 5000
                     ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Mutes Moonlight's audio when you Alt+Tab out of the stream or click on a different window.")
+                    ToolTip.text: qsTr("Mutes MoonlightVibe's audio when you Alt+Tab out of the stream or click on a different window.")
+                }
+
+                CheckBox {
+                    id: enableMicrophoneCheck
+                    width: parent.width
+                    text: qsTr("Enable microphone streaming")
+                    font.pointSize: 12
+                    checked: StreamingPreferences.enableMicrophone
+                    onCheckedChanged: {
+                        StreamingPreferences.enableMicrophone = checked
+                        StreamingPreferences.refreshMicrophoneMonitor()
+                    }
+
+                    ToolTip.delay: 1000
+                    ToolTip.timeout: 5000
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Streams your microphone audio to the host PC when the host supports microphone passthrough.")
+                }
+
+                AutoResizingComboBox {
+                    id: microphoneDeviceComboBox
+                    width: parent.width
+                    enabled: enableMicrophoneCheck.checked
+                    model: [qsTr("Default system microphone")].concat(StreamingPreferences.microphoneDevices)
+
+                    function syncSelection() {
+                        const savedDevice = StreamingPreferences.microphoneDevice
+                        currentIndex = 0
+
+                        for (let i = 0; i < StreamingPreferences.microphoneDevices.length; i++) {
+                            if (StreamingPreferences.microphoneDevices[i] === savedDevice) {
+                                currentIndex = i + 1
+                                return
+                            }
+                        }
+                    }
+
+                    Component.onCompleted: {
+                        StreamingPreferences.refreshMicrophoneDevices()
+                        syncSelection()
+                    }
+
+                    onActivated: {
+                        if (currentIndex === 0) {
+                            StreamingPreferences.microphoneDevice = ""
+                        }
+                        else {
+                            StreamingPreferences.microphoneDevice = StreamingPreferences.microphoneDevices[currentIndex - 1]
+                        }
+                        StreamingPreferences.refreshMicrophoneMonitor()
+                    }
+
+                    Connections {
+                        target: StreamingPreferences
+
+                        function onMicrophoneDevicesChanged() {
+                            microphoneDeviceComboBox.syncSelection()
+                        }
+                    }
+
+                    ToolTip.delay: 1000
+                    ToolTip.timeout: 5000
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Choose which local microphone MoonlightVibe captures. Leave this on the default option to follow your system input device.")
+                }
+
+                Label {
+                    width: parent.width
+                    text: qsTr("Microphone input preview")
+                    font.pointSize: 12
+                    wrapMode: Text.Wrap
+                }
+
+                Rectangle {
+                    width: parent.width
+                    height: 16
+                    radius: 8
+                    color: "#202733"
+                    border.width: 1
+                    border.color: StreamingPreferences.microphoneMonitorSignalDetected ? "#45c486" : "#3d4857"
+
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: Math.max(6, parent.width * StreamingPreferences.microphoneMonitorLevel)
+                        height: parent.height
+                        radius: parent.radius
+                        visible: StreamingPreferences.microphoneMonitorLevel > 0.001
+                        color: StreamingPreferences.microphoneMonitorSignalDetected ? "#45c486" : "#5f6f86"
+                    }
+                }
+
+                Label {
+                    width: parent.width
+                    wrapMode: Text.Wrap
+                    font.pointSize: 10
+                    text: StreamingPreferences.microphoneMonitorStatus + "\n" +
+                          (StreamingPreferences.microphoneMonitorSignalDetected ?
+                               qsTr("Input detected on the selected microphone.") :
+                               qsTr("No microphone input detected yet."))
                 }
             }
         }
@@ -1157,7 +1260,7 @@ Flickable {
                         if (StreamingPreferences.language !== new_language) {
                             StreamingPreferences.language = languageListModel.get(currentIndex).val
                             if (!StreamingPreferences.retranslate()) {
-                                ToolTip.show(qsTr("You must restart Moonlight for this change to take effect"), 5000)
+                                ToolTip.show(qsTr("You must restart MoonlightVibe for this change to take effect"), 5000)
                             }
                             else {
                                 // Force the back operation to pop any AppView pages that exist.
@@ -1337,7 +1440,7 @@ Flickable {
                         ToolTip.timeout: 10000
                         ToolTip.visible: hovered
                         ToolTip.text: qsTr("This enables the capture of system-wide keyboard shortcuts like Alt+Tab that would normally be handled by the client OS while streaming.") + "\n\n" +
-                                      qsTr("NOTE: Certain keyboard shortcuts like Ctrl+Alt+Del on Windows cannot be intercepted by any application, including Moonlight.")
+                                      qsTr("NOTE: Certain keyboard shortcuts like Ctrl+Alt+Del on Windows cannot be intercepted by any application, including MoonlightVibe.")
                     }
 
                     AutoResizingComboBox {
@@ -1498,7 +1601,7 @@ Flickable {
                 CheckBox {
                     id: backgroundGamepadCheck
                     width: parent.width
-                    text: qsTr("Process gamepad input when Moonlight is in the background")
+                    text: qsTr("Process gamepad input when MoonlightVibe is in the background")
                     font.pointSize: 12
                     visible: SystemProperties.hasDesktopEnvironment
                     checked: StreamingPreferences.backgroundGamepad
@@ -1509,7 +1612,46 @@ Flickable {
                     ToolTip.delay: 1000
                     ToolTip.timeout: 5000
                     ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Allows Moonlight to capture gamepad inputs even if it's not the current window in focus")
+                    ToolTip.text: qsTr("Allows MoonlightVibe to capture gamepad inputs even if it's not the current window in focus")
+                }
+
+                Row {
+                    width: parent.width
+                    spacing: 5
+
+                    Label {
+                        text: qsTr("Gamepad quit combo:")
+                        font.pointSize: 12
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+
+                    AutoResizingComboBox {
+                        id: gamepadQuitComboBox
+                        font.pointSize: 12
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        model: ListModel {
+                            ListElement { text: "Start + Select + L1 + R1 (default)" }
+                            ListElement { text: "Select + L1 + R1 + X" }
+                            ListElement { text: "Select + L1 + R1 + Y" }
+                            ListElement { text: "Start + L1 + R1 + A" }
+                            ListElement { text: "Start + L1 + R1 + B" }
+                            ListElement { text: "L1 + R1 + X + Y" }
+                            ListElement { text: "L1 + R1 + A + B" }
+                            ListElement { text: "Disabled" }
+                        }
+
+                        Component.onCompleted: currentIndex = StreamingPreferences.gamepadQuitCombo
+                        onActivated: {
+                            StreamingPreferences.gamepadQuitCombo = currentIndex
+                            StreamingPreferences.save()
+                        }
+
+                        ToolTip.delay: 1000
+                        ToolTip.timeout: 5000
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Choose which gamepad button combination exits the stream. Use an alternative if the default conflicts with your device.")
+                    }
                 }
             }
         }

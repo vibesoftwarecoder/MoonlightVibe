@@ -2,10 +2,10 @@ QT += core quick network quickcontrols2 svg
 CONFIG += c++17
 
 unix:!macx {
-    TARGET = moonlight
+    TARGET = moonlightvibe
 } else {
     # On macOS, this is the name displayed in the global menu bar
-    TARGET = Moonlight
+    TARGET = MoonlightVibe
 }
 
 include(../globaldefs.pri)
@@ -36,6 +36,10 @@ DEFINES += QT_DEPRECATED_WARNINGS
 DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 win32 {
+    !exists($$PWD/../libs/windows) {
+        error("Missing dependencies. Please run 'powershell .\setup-deps.ps1' to fetch prebuilt libraries.")
+    }
+
     contains(QT_ARCH, x86_64) {
         LIBS += -L$$PWD/../libs/windows/lib/x64
         INCLUDEPATH += $$PWD/../libs/windows/include/x64 $$PWD/../libs/windows/include/x64/SDL2
@@ -49,6 +53,10 @@ win32 {
     LIBS += ws2_32.lib winmm.lib dxva2.lib ole32.lib gdi32.lib user32.lib d3d9.lib dwmapi.lib dbghelp.lib
 }
 macx:!disable-prebuilts {
+    !exists($$PWD/../libs/mac) {
+        error("Missing dependencies. Please run 'python3 setup-deps.py' to fetch prebuilt libraries.")
+    }
+
     INCLUDEPATH += $$PWD/../libs/mac/include $$PWD/../libs/mac/include/SDL2
     LIBS += -L$$PWD/../libs/mac/lib
 }
@@ -149,7 +157,7 @@ win32:!winrt {
 }
 macx {
     !disable-prebuilts {
-        LIBS += -lssl.3 -lcrypto.3 -lavcodec.62 -lavutil.60 -lswscale.9 -lopus -lSDL2 -lSDL2_ttf
+        LIBS += -lssl.3 -lcrypto.3 -lavcodec.62 -lavutil.60 -lswscale.9 -lopus.0 -lSDL2 -lSDL2_ttf
         CONFIG += discord-rpc
     }
 
@@ -168,6 +176,7 @@ SOURCES += \
     backend/nvhttp.cpp \
     backend/nvpairingmanager.cpp \
     backend/computermanager.cpp \
+    backend/multiseatdiscovery.cpp \
     backend/boxartmanager.cpp \
     backend/richpresencemanager.cpp \
     cli/commandlineparser.cpp \
@@ -185,6 +194,7 @@ SOURCES += \
     streaming/input/reltouch.cpp \
     streaming/session.cpp \
     streaming/audio/audio.cpp \
+    streaming/audio/capture/microphonecapture.cpp \
     streaming/audio/renderers/sdlaud.cpp \
     gui/computermodel.cpp \
     gui/appmodel.cpp \
@@ -212,6 +222,7 @@ HEADERS += \
     backend/nvhttp.h \
     backend/nvpairingmanager.h \
     backend/computermanager.h \
+    backend/multiseatdiscovery.h \
     backend/boxartmanager.h \
     backend/richpresencemanager.h \
     cli/commandlineparser.h \
@@ -221,6 +232,7 @@ HEADERS += \
     settings/streamingpreferences.h \
     streaming/input/input.h \
     streaming/session.h \
+    streaming/audio/capture/microphonecapture.h \
     streaming/audio/renderers/renderer.h \
     streaming/audio/renderers/sdl.h \
     gui/computermodel.h \
@@ -534,9 +546,9 @@ unix:!macx: {
 }
 win32 {
     RC_ICONS = moonlight.ico
-    QMAKE_TARGET_COMPANY = Moonlight Game Streaming Project
-    QMAKE_TARGET_DESCRIPTION = Moonlight Game Streaming Client
-    QMAKE_TARGET_PRODUCT = Moonlight
+    QMAKE_TARGET_COMPANY = Vibe Software
+    QMAKE_TARGET_DESCRIPTION = MoonlightVibe Game Streaming Client
+    QMAKE_TARGET_PRODUCT = MoonlightVibe
 
     CONFIG -= embed_manifest_exe
     QMAKE_LFLAGS += /MANIFEST:embed /MANIFESTINPUT:$${PWD}/Moonlight.exe.manifest

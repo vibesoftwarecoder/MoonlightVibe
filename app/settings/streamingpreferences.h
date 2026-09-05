@@ -3,12 +3,20 @@
 #include <QObject>
 #include <QRect>
 #include <QQmlEngine>
+#include <QStringList>
+#include <atomic>
+
+#include "SDL_compat.h"
+
+class QTimer;
 
 class StreamingPreferences : public QObject
 {
     Q_OBJECT
 
 public:
+    ~StreamingPreferences() override;
+
     static StreamingPreferences* get(QQmlEngine *qmlEngine = nullptr);
 
     Q_INVOKABLE static int
@@ -108,6 +116,20 @@ public:
     };
     Q_ENUM(CaptureSysKeysMode);
 
+    // New entries must go at the end to avoid renumbering existing entries.
+    enum GamepadQuitCombo
+    {
+        GQC_DEFAULT,          // Start + Select + L1 + R1
+        GQC_SELECT_L1_R1_X,   // Select + L1 + R1 + X
+        GQC_SELECT_L1_R1_Y,   // Select + L1 + R1 + Y
+        GQC_START_L1_R1_A,    // Start + L1 + R1 + A
+        GQC_START_L1_R1_B,    // Start + L1 + R1 + B
+        GQC_L1_R1_X_Y,        // L1 + R1 + X + Y
+        GQC_L1_R1_A_B,        // L1 + R1 + A + B
+        GQC_DISABLED,         // Disabled
+    };
+    Q_ENUM(GamepadQuitCombo);
+
     Q_PROPERTY(int width MEMBER width NOTIFY displayModeChanged)
     Q_PROPERTY(int height MEMBER height NOTIFY displayModeChanged)
     Q_PROPERTY(int fps MEMBER fps NOTIFY displayModeChanged)
@@ -129,6 +151,12 @@ public:
     Q_PROPERTY(bool gamepadMouse MEMBER gamepadMouse NOTIFY gamepadMouseChanged)
     Q_PROPERTY(bool detectNetworkBlocking MEMBER detectNetworkBlocking NOTIFY detectNetworkBlockingChanged)
     Q_PROPERTY(bool showPerformanceOverlay MEMBER showPerformanceOverlay NOTIFY showPerformanceOverlayChanged)
+    Q_PROPERTY(bool enableMicrophone MEMBER enableMicrophone NOTIFY enableMicrophoneChanged)
+    Q_PROPERTY(QString microphoneDevice MEMBER microphoneDevice NOTIFY microphoneDeviceChanged)
+    Q_PROPERTY(QStringList microphoneDevices READ microphoneDevices NOTIFY microphoneDevicesChanged)
+    Q_PROPERTY(double microphoneMonitorLevel READ microphoneMonitorLevel NOTIFY microphoneMonitorLevelChanged)
+    Q_PROPERTY(QString microphoneMonitorStatus READ microphoneMonitorStatus NOTIFY microphoneMonitorStatusChanged)
+    Q_PROPERTY(bool microphoneMonitorSignalDetected READ microphoneMonitorSignalDetected NOTIFY microphoneMonitorSignalDetectedChanged)
     Q_PROPERTY(AudioConfig audioConfig MEMBER audioConfig NOTIFY audioConfigChanged)
     Q_PROPERTY(VideoCodecConfig videoCodecConfig MEMBER videoCodecConfig NOTIFY videoCodecConfigChanged)
     Q_PROPERTY(bool enableHdr MEMBER enableHdr NOTIFY enableHdrChanged)
@@ -145,8 +173,17 @@ public:
     Q_PROPERTY(bool keepAwake MEMBER keepAwake NOTIFY keepAwakeChanged)
     Q_PROPERTY(CaptureSysKeysMode captureSysKeysMode MEMBER captureSysKeysMode NOTIFY captureSysKeysModeChanged)
     Q_PROPERTY(Language language MEMBER language NOTIFY languageChanged);
+    Q_PROPERTY(GamepadQuitCombo gamepadQuitCombo MEMBER gamepadQuitCombo NOTIFY gamepadQuitComboChanged)
 
     Q_INVOKABLE bool retranslate();
+    Q_INVOKABLE void refreshMicrophoneDevices();
+    Q_INVOKABLE void setMicrophoneMonitorActive(bool active);
+    Q_INVOKABLE void refreshMicrophoneMonitor();
+
+    QStringList microphoneDevices() const;
+    double microphoneMonitorLevel() const;
+    QString microphoneMonitorStatus() const;
+    bool microphoneMonitorSignalDetected() const;
 
     // Directly accessible members for preferences
     int width;
@@ -170,6 +207,8 @@ public:
     bool gamepadMouse;
     bool detectNetworkBlocking;
     bool showPerformanceOverlay;
+    bool enableMicrophone;
+    QString microphoneDevice;
     bool swapMouseButtons;
     bool muteOnFocusLoss;
     bool backgroundGamepad;
@@ -187,6 +226,7 @@ public:
     UIDisplayMode uiDisplayMode;
     Language language;
     CaptureSysKeysMode captureSysKeysMode;
+    GamepadQuitCombo gamepadQuitCombo;
 
 signals:
     void displayModeChanged();
@@ -216,6 +256,12 @@ signals:
     void gamepadMouseChanged();
     void detectNetworkBlockingChanged();
     void showPerformanceOverlayChanged();
+    void enableMicrophoneChanged();
+    void microphoneDeviceChanged();
+    void microphoneDevicesChanged();
+    void microphoneMonitorLevelChanged();
+    void microphoneMonitorStatusChanged();
+    void microphoneMonitorSignalDetectedChanged();
     void mouseButtonsChanged();
     void muteOnFocusLossChanged();
     void backgroundGamepadChanged();
@@ -224,12 +270,28 @@ signals:
     void captureSysKeysModeChanged();
     void keepAwakeChanged();
     void languageChanged();
+    void gamepadQuitComboChanged();
 
 private:
     explicit StreamingPreferences(QQmlEngine *qmlEngine);
+    static void microphoneMonitorCallback(void* userdata, Uint8* stream, int len);
+
+    bool startMicrophoneMonitor();
+    void stopMicrophoneMonitor(const QString& status = QString());
+    void processMicrophoneMonitorData(const Uint8* stream, int len);
+    void updateMicrophoneMonitorState();
+    void setMicrophoneMonitorStatus(const QString& status);
 
     QString getSuffixFromLanguage(Language lang);
 
     QQmlEngine* m_QmlEngine;
+    QStringList m_MicrophoneDevices;
+    SDL_AudioDeviceID m_MicrophoneMonitorDeviceId;
+    SDL_AudioSpec m_MicrophoneMonitorSpec;
+    QTimer* m_MicrophoneMonitorTimer;
+    std::atomic<int> m_PendingMicrophonePeak;
+    double m_MicrophoneMonitorLevel;
+    bool m_MicrophoneMonitorActive;
+    bool m_MicrophoneMonitorSignalDetected;
+    QString m_MicrophoneMonitorStatus;
 };
-

@@ -63,7 +63,7 @@ CenteredGridView {
             errorDialog.text = qsTr("Unable to connect to the specified PC.")
 
             if (detectedPortBlocking) {
-                errorDialog.text += "\n\n" + qsTr("This PC's Internet connection is blocking Moonlight. Streaming over the Internet may not work while connected to this network.")
+                errorDialog.text += "\n\n" + qsTr("This PC's Internet connection is blocking MoonlightVibe. Streaming over the Internet may not work while connected to this network.")
             }
             else {
                 errorDialog.helpText = qsTr("Click the Help button for possible solutions.")
@@ -216,13 +216,24 @@ CenteredGridView {
                         showPcDetailsDialog.open()
                     }
                 }
+                NavigableMenuItem {
+                    text: qsTr("Stream Settings")
+                    onTriggered: {
+                        var prefs = computerModel.getSeatStreamPrefs(index)
+                        seatStreamSettingsDialog.pcIndex = index
+                        seatStreamSettingsDialog.pcName = model.name
+                        seatStreamSettingsDialog.bitrateKbps = prefs.bitrateKbps
+                        seatStreamSettingsDialog.codecIndex = prefs.videoCodecConfig < 0 ? 0 : prefs.videoCodecConfig + 1
+                        seatStreamSettingsDialog.open()
+                    }
+                }
             }
         }
 
         onClicked: {
             if (model.online) {
                 if (!model.serverSupported) {
-                    errorDialog.text = qsTr("The version of GeForce Experience on %1 is not supported by this build of Moonlight. You must update Moonlight to stream from %1.").arg(model.name)
+                    errorDialog.text = qsTr("The version of GeForce Experience on %1 is not supported by this build of MoonlightVibe. You must update MoonlightVibe to stream from %1.").arg(model.name)
                     errorDialog.helpText = ""
                     errorDialog.open()
                 }
@@ -321,22 +332,22 @@ CenteredGridView {
         standardButtons: Dialog.Ok
 
         onAboutToShow: {
-            testConnectionDialog.text = qsTr("Moonlight is testing your network connection to determine if any required ports are blocked.") + "\n\n" + qsTr("This may take a few seconds…")
+            testConnectionDialog.text = qsTr("MoonlightVibe is testing your network connection to determine if any required ports are blocked.") + "\n\n" + qsTr("This may take a few seconds…")
             showSpinner = true
         }
 
         function connectionTestComplete(result, blockedPorts)
         {
             if (result === -1) {
-                text = qsTr("The network test could not be performed because none of Moonlight's connection testing servers were reachable from this PC. Check your Internet connection or try again later.")
+                text = qsTr("The network test could not be performed because none of MoonlightVibe's connection testing servers were reachable from this PC. Check your Internet connection or try again later.")
                 imageSrc = "qrc:/res/baseline-warning-24px.svg"
             }
             else if (result === 0) {
-                text = qsTr("This network does not appear to be blocking Moonlight. If you still have trouble connecting, check your PC's firewall settings.") + "\n\n" + qsTr("If you are trying to stream over the Internet, install the Moonlight Internet Hosting Tool on your gaming PC and run the included Internet Streaming Tester to check your gaming PC's Internet connection.")
+                text = qsTr("This network does not appear to be blocking MoonlightVibe. If you still have trouble connecting, check your PC's firewall settings.") + "\n\n" + qsTr("If you are trying to stream over the Internet, install the MoonlightVibe Internet Hosting Tool on your gaming PC and run the included Internet Streaming Tester to check your gaming PC's Internet connection.")
                 imageSrc = "qrc:/res/baseline-check_circle_outline-24px.svg"
             }
             else {
-                text = qsTr("Your PC's current network connection seems to be blocking Moonlight. Streaming over the Internet may not work while connected to this network.") + "\n\n" + qsTr("The following network ports were blocked:") + "\n"
+                text = qsTr("Your PC's current network connection seems to be blocking MoonlightVibe. Streaming over the Internet may not work while connected to this network.") + "\n\n" + qsTr("The following network ports were blocked:") + "\n"
                 text += blockedPorts
                 imageSrc = "qrc:/res/baseline-error_outline-24px.svg"
             }
@@ -398,6 +409,68 @@ CenteredGridView {
         text: showPcDetailsDialog.pcDetails
         imageSrc: "qrc:/res/baseline-help_outline-24px.svg"
         standardButtons: Dialog.Ok
+    }
+
+    NavigableDialog {
+        id: seatStreamSettingsDialog
+        property string pcName: ""
+        property int pcIndex: -1
+        property int bitrateKbps: 0
+        property int codecIndex: 0
+
+        standardButtons: Dialog.Ok | Dialog.Cancel
+
+        onOpened: {
+            bitrateField.text = seatStreamSettingsDialog.bitrateKbps > 0 ? seatStreamSettingsDialog.bitrateKbps : ""
+            codecCombo.currentIndex = seatStreamSettingsDialog.codecIndex
+        }
+
+        onAccepted: {
+            var bitrate = parseInt(bitrateField.text) || 0
+            var codec = codecCombo.currentIndex === 0 ? -1 : codecCombo.currentIndex - 1
+            computerModel.setSeatStreamPrefs(seatStreamSettingsDialog.pcIndex, bitrate, codec)
+        }
+
+        ColumnLayout {
+            spacing: 8
+
+            Label {
+                text: qsTr("Stream settings for %1").arg(seatStreamSettingsDialog.pcName)
+                font.bold: true
+                Layout.fillWidth: true
+            }
+
+            Label {
+                text: qsTr("Bitrate (Kbps) — leave blank to use global setting:")
+                font.pointSize: 11
+            }
+
+            TextField {
+                id: bitrateField
+                placeholderText: qsTr("e.g. 20000 (blank = global)")
+                inputMethodHints: Qt.ImhDigitsOnly
+                validator: IntValidator { bottom: 0; top: 150000 }
+                Layout.fillWidth: true
+                Keys.onReturnPressed: seatStreamSettingsDialog.accept()
+            }
+
+            Label {
+                text: qsTr("Video codec:")
+                font.pointSize: 11
+            }
+
+            AutoResizingComboBox {
+                id: codecCombo
+                Layout.fillWidth: true
+                model: ListModel {
+                    ListElement { text: "Global default" }
+                    ListElement { text: "Auto" }
+                    ListElement { text: "H.264" }
+                    ListElement { text: "HEVC (H.265)" }
+                    ListElement { text: "AV1" }
+                }
+            }
+        }
     }
 
     ScrollBar.vertical: ScrollBar {}

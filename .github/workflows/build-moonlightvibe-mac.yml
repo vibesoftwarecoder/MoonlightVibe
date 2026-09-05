@@ -1,5 +1,5 @@
 ---
-name: Build - MoonlightVibe Windows x64
+name: Build - MoonlightVibe macOS
 
 on:
   push:
@@ -12,9 +12,9 @@ permissions:
 
 jobs:
   build:
-    runs-on: windows-2025
+    runs-on: macos-15
     env:
-      QT_VERSION: 6.11.0
+      QT_VERSION: 6.11.1
 
     steps:
       - name: Checkout Repository
@@ -23,13 +23,17 @@ jobs:
           submodules: 'recursive'
           fetch-depth: 1
 
-      - name: Download dependencies
-        run: powershell ./setup-deps.ps1
+      - name: Install create-dmg
+        run: |
+          brew install node
+          npm install --global create-dmg
 
-      - name: Install Qt x64
+      - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
           cache: true
+          set-env: true
+          add-tools-to-path: true
           version: ${{ env.QT_VERSION }}
           aqtsource: 'git+https://github.com/miurahr/aqtinstall.git@073e34d7c2ab4ae6961ed7cca690b3abd5ba5a7e'
 
@@ -42,37 +46,33 @@ jobs:
           echo "version=${VERSION}-${SHA}" >> "$GITHUB_OUTPUT"
           echo "CI_VERSION=${VERSION}-${SHA}" >> "$GITHUB_ENV"
 
-      - name: Build x64
-        shell: cmd
-        run: |
-          set "PATH=%QT_PATH%;%PATH%"
-          scripts\build-arch.bat Release x64
-        env:
-          QT_PATH: ${{ runner.workspace }}\Qt\${{ env.QT_VERSION }}\msvc2022_64\bin
+      - name: Build and package
+        run: bash scripts/generate-dmg.sh Release
 
-      - name: Rename portable zip
-        shell: pwsh
+      - name: Rename DMG
+        shell: bash
         run: |
-          $src = Get-ChildItem "build\installer-x64-Release\MoonlightVibePortable-*.zip" | Select-Object -First 1
-          $dst = "build\installer-x64-Release\MoonlightVibe-windows-x64-${{ steps.version.outputs.version }}.zip"
-          Move-Item $src.FullName $dst
-          echo "ZIP_PATH=$dst" >> $env:GITHUB_ENV
+          SRC=$(ls build/installer-Release/*.dmg | head -1)
+          DST="build/installer-Release/MoonlightVibe-mac-${{ steps.version.outputs.version }}.dmg"
+          mv "$SRC" "$DST"
+          echo "DMG_PATH=$DST" >> "$GITHUB_ENV"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v5
         with:
-          name: MoonlightVibe-windows-x64-${{ steps.version.outputs.version }}
-          path: ${{ env.ZIP_PATH }}
+          name: MoonlightVibe-mac-${{ steps.version.outputs.version }}
+          path: ${{ env.DMG_PATH }}
+          compression-level: 0
           if-no-files-found: error
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: github.event_name == 'push'
         with:
-          tag_name: moonlightvibe-win-${{ steps.version.outputs.version }}
-          name: MoonlightVibe Windows ${{ steps.version.outputs.version }}
-          files: ${{ env.ZIP_PATH }}
+          tag_name: moonlightvibe-mac-${{ steps.version.outputs.version }}
+          name: MoonlightVibe macOS ${{ steps.version.outputs.version }}
+          files: ${{ env.DMG_PATH }}
           body: |
-            MoonlightVibe Windows build — rebased onto moonlight-stream/moonlight-qt upstream.
+            MoonlightVibe macOS build — rebased onto moonlight-stream/moonlight-qt upstream.
 
             Includes all MoonlightVibe patches: mic passthrough, per-seat stream settings, latency tuning, and configurable gamepad quit combo.
