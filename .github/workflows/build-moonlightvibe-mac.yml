@@ -1,10 +1,16 @@
 ---
 name: Build - MoonlightVibe macOS
 
+# A push to master BUILDS but no longer publishes. Publishing happens only on a
+# v* tag, so committing and releasing are separate decisions. Before 2026-09-05
+# every master push cut a release, which meant small fixes waited for something
+# worth releasing to ride along with.
 on:
   push:
     branches:
       - master
+    tags:
+      - 'v*'
     paths-ignore:
       - '**.md'
       - '.github/ISSUE_TEMPLATE/**'
@@ -47,7 +53,18 @@ jobs:
         run: |
           VERSION=$(cat app/version.txt)
           SHA=$(echo "$GITHUB_SHA" | cut -c1-6)
-          echo "version=${VERSION}-${SHA}" >> "$GITHUB_OUTPUT"
+          # On a tag build the tag and app/version.txt must agree. If they do not,
+          # the release title and the binary would claim different versions, and the
+          # mismatch is invisible until someone reports it.
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+            if [[ "v${VERSION}" != "$TAG" ]]; then
+              echo "::error::Tag ${TAG} does not match app/version.txt (${VERSION}). Bump version.txt or move the tag."
+              exit 1
+            fi
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
           echo "CI_VERSION=${VERSION}-${SHA}" >> "$GITHUB_ENV"
 
       - name: Build and package
@@ -71,12 +88,20 @@ jobs:
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
-        if: github.event_name == 'push'
+        # Tag pushes only. A master push builds and stops; workflow_dispatch never
+        # publishes, which is what makes it safe for verifying a merge branch.
+        if: startsWith(github.ref, 'refs/tags/')
         with:
-          tag_name: moonlightvibe-mac-${{ steps.version.outputs.version }}
-          name: MoonlightVibe macOS ${{ steps.version.outputs.version }}
+          # Both platform workflows target this same tag, so one release carries
+          # both assets. Whichever finishes second attaches to the existing release.
+          tag_name: ${{ github.ref_name }}
+          name: MoonlightVibe ${{ steps.version.outputs.version }}
           files: ${{ env.DMG_PATH }}
           body: |
-            MoonlightVibe macOS build — rebased onto moonlight-stream/moonlight-qt upstream.
+            Rebased onto `moonlight-stream/moonlight-qt` upstream.
+
+            Built from `${{ github.sha }}` (`${{ steps.version.outputs.sha }}`).
+
+            Windows and macOS assets are attached to this same release.
 
             Includes all MoonlightVibe patches: mic passthrough, per-seat stream settings, latency tuning, and configurable gamepad quit combo.
