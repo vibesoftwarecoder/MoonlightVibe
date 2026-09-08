@@ -256,6 +256,7 @@ bool D3D11VARenderer::createDeviceByAdapterIndex(int adapterIndex, bool* adapter
     HRESULT hr;
     ComPtr<ID3D11Device> device;
     ComPtr<ID3D11DeviceContext> deviceContext;
+    LARGE_INTEGER umdVersion;
 
     SDL_assert(!m_RenderDevice);
     SDL_assert(!m_RenderDeviceContext);
@@ -287,12 +288,25 @@ bool D3D11VARenderer::createDeviceByAdapterIndex(int adapterIndex, bool* adapter
         goto Exit;
     }
 
+    // Query the GPU driver version
+    hr = adapter->CheckInterfaceSupport(__uuidof(IDXGIDevice), &umdVersion);
+    if (FAILED(hr)) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                     "IDXGIAdapter::CheckInterfaceSupport() failed: %x",
+                     hr);
+        goto Exit;
+    }
+
     SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
-                "Detected GPU %d: %S (%x:%x)",
+                "Detected GPU %d: %S (%x:%x) (driver: %u.%u.%u.%u)",
                 adapterIndex,
                 adapterDesc.Description,
                 adapterDesc.VendorId,
-                adapterDesc.DeviceId);
+                adapterDesc.DeviceId,
+                HIWORD(umdVersion.HighPart),
+                LOWORD(umdVersion.HighPart),
+                HIWORD(umdVersion.LowPart),
+                LOWORD(umdVersion.LowPart));
 
     hr = D3D11CreateDevice(adapter.Get(),
                            D3D_DRIVER_TYPE_UNKNOWN,
@@ -385,14 +399,15 @@ bool D3D11VARenderer::createDeviceByAdapterIndex(int adapterIndex, bool* adapter
             // - Qualcomm (decoding is unstable/slow on QC710)
             // - AMD prior to Vega (Polaris cards display corrupt output - see #2003,
             //                      HD 5570 drivers deadlock with shared texture arrays)
-            // - Nvidia prior to Maxwell 2? (Fermi cards display all zero/green)
+            // - Nvidia drivers prior to ~471.11 (Earlier drivers display all zero/green,
+            //                                    We approximate by requiring WDDM 3.0+)
             //
             // Due to all these issues, we will only use this path for Intel/AMD and NVIDIA where we know it
             // provides tangible benefits (performance for the former and VRR support for the latter).
             separateDevices = adapterDesc.VendorId == 0x8086 || // Intel
-                              (adapterDesc.VendorId == 0x10DE && featureLevel >= D3D_FEATURE_LEVEL_11_1) || // NVIDIA Maxwell 2+ (PCI ID)
+                              (adapterDesc.VendorId == 0x10DE && HIWORD(umdVersion.HighPart) >= 30) || // NVIDIA WDDM 3.0+ (PCI ID)
                               adapterDesc.VendorId == 'ADVN' || // NVIDIA (WoA)
-                              (adapterDesc.VendorId == 0x1002 && minPrecSupport.PixelShaderMinPrecision == D3D11_SHADER_MIN_PRECISION_16_BIT); // AMD Vega+
+                              (adapterDesc.VendorId == 0x1002 && (minPrecSupport.PixelShaderMinPrecision & D3D11_SHADER_MIN_PRECISION_16_BIT)); // AMD Vega+
         }
     }
 
