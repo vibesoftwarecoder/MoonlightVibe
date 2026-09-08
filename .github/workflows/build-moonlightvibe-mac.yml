@@ -80,6 +80,15 @@ jobs:
 
       - name: Upload artifact
         uses: actions/upload-artifact@v5
+        # Non-fatal on a TAG build only. Observed 2026-09-08: this step failed with
+        # "Failed to FinalizeArtifact: (403) Forbidden: Error from intermediary" - transient
+        # GitHub artifact storage, with the build itself already green. Because "Create GitHub
+        # Release" runs after this step and has no always() guard, that failure would abort the
+        # job before publishing and leave a tag with no release.
+        #
+        # On master/workflow_dispatch this artifact is the ONLY output, so a failure there must
+        # still fail the job - that is the signal a merge-verification build exists to give.
+        continue-on-error: ${{ startsWith(github.ref, 'refs/tags/') }}
         with:
           name: MoonlightVibe-mac-${{ steps.version.outputs.version }}
           path: ${{ env.DMG_PATH }}
