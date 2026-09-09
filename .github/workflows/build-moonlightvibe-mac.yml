@@ -65,6 +65,16 @@ jobs:
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+          # Hand-written notes for this version when they exist, otherwise the generic body
+          # below. Release text is public and worth writing deliberately, but a release must
+          # never be blocked on someone having remembered to write it. Matches MultiSeat.
+          NOTES="docs/release-notes/${VERSION}.md"
+          if [ -f "$NOTES" ]; then
+            echo "notes_file=${NOTES}" >> "$GITHUB_OUTPUT"
+            echo "Using hand-written notes from ${NOTES}"
+          else
+            echo "No ${NOTES}; falling back to the generic release body."
+          fi
           echo "CI_VERSION=${VERSION}-${SHA}" >> "$GITHUB_ENV"
 
       - name: Build and package
@@ -104,6 +114,8 @@ jobs:
           # Both platform workflows target this same tag, so one release carries
           # both assets. Whichever finishes second attaches to the existing release.
           tag_name: ${{ github.ref_name }}
+          # body_path wins when docs/release-notes/<version>.md exists; body is the fallback.
+          body_path: ${{ steps.version.outputs.notes_file }}
           name: MoonlightVibe ${{ steps.version.outputs.version }}
           files: ${{ env.DMG_PATH }}
           body: |
