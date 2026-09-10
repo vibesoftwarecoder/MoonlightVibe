@@ -261,6 +261,10 @@ private slots:
 
     void handleMdnsServiceResolved(MdnsPendingComputer* computer, QVector<QHostAddress>& addresses);
 
+    // Refresh the addresses MultiSeatDiscovery probes for seats. Driven by its aboutToPoll signal
+    // rather than by the host add/remove paths, which run under the write lock on a thread pool.
+    void updateMultiSeatProbeTargets();
+
 private:
     void saveHosts();
 
