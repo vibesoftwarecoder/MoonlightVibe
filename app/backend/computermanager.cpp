@@ -385,12 +385,18 @@ void ComputerManager::startPolling()
         qWarning() << "mDNS is disabled by user preference";
     }
 
-    // Start MultiSeat seat auto-discovery
+    // Start MultiSeat seat auto-discovery.
+    //
+    // Seats are found by probing the seat port block on hosts the user already has, not by asking
+    // the MultiSeat service — that only worked when Moonlight ran on the host itself. So discovery
+    // needs the known-host addresses, refreshed each time it polls.
     m_MultiSeatDiscovery = new MultiSeatDiscovery(this);
     connect(m_MultiSeatDiscovery, &MultiSeatDiscovery::seatFound,
             this, [this](QString host, uint16_t port, QString name) {
         addNewHost(NvAddress(host, port), false, name);
     });
+    connect(m_MultiSeatDiscovery, &MultiSeatDiscovery::aboutToPoll,
+            this, &ComputerManager::updateMultiSeatProbeTargets);
     m_MultiSeatDiscovery->start();
 
     // Start polling threads for each known host
@@ -424,6 +430,38 @@ void ComputerManager::startPollingComputer(NvComputer* computer)
         pollingEntry->setActiveThread(thread);
         thread->start();
     }
+}
+
+// Hand seat discovery the addresses of hosts the user already has.
+//
+// Deduplicated by address rather than by host, because a seat and the console Apollo it lives
+// beside share one address — probing it twice would just double the requests for nothing. Local
+// addresses only: seat ports are not port-forwarded, so probing a remote address would be four
+// guaranteed failures per tick against someone else's network.
+void ComputerManager::updateMultiSeatProbeTargets()
+{
+    if (m_MultiSeatDiscovery == nullptr) {
+        return;
+    }
+
+    QStringList addresses;
+
+    QReadLocker lock(&m_Lock);
+    QMapIterator<QString, NvComputer*> i(m_KnownHosts);
+    while (i.hasNext()) {
+        i.next();
+        NvComputer* computer = i.value();
+
+        QReadLocker computerLock(&computer->lock);
+        for (const NvAddress& candidate : { computer->localAddress, computer->manualAddress }) {
+            if (!candidate.isNull() && !addresses.contains(candidate.address())) {
+                addresses.append(candidate.address());
+            }
+        }
+    }
+    lock.unlock();
+
+    m_MultiSeatDiscovery->setHostsToProbe(addresses);
 }
 
 void ComputerManager::handleMdnsServiceResolved(MdnsPendingComputer* computer,
