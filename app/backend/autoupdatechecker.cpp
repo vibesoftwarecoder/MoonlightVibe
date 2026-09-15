@@ -5,6 +5,13 @@
 #include <QJsonArray>
 #include <QJsonObject>
 
+// MoonlightVibe checks its OWN releases. Upstream Moonlight's manifest
+// (moonlight-stream.org/updates/qt.json) describes upstream's versions, so reading it would tell
+// MoonlightVibe users to "update" to upstream Moonlight whenever upstream's version number is
+// higher than ours. /releases/latest never returns drafts or pre-releases.
+static const char* const k_LatestReleaseUrl =
+    "https://api.github.com/repos/vibesoftwarecoder/MoonlightVibe/releases/latest";
+
 AutoUpdateChecker::AutoUpdateChecker(QObject *parent) :
     QObject(parent)
 {
@@ -20,7 +27,7 @@ AutoUpdateChecker::AutoUpdateChecker(QObject *parent) :
             this, &AutoUpdateChecker::handleUpdateCheckRequestFinished);
 
     QString currentVersion(VERSION_STR);
-    qDebug() << "Current Moonlight version:" << currentVersion;
+    qDebug() << "Current MoonlightVibe version:" << currentVersion;
     parseStringToVersionQuad(currentVersion, m_CurrentVersionQuad);
 
     // Should at least have a 1.0-style version number
@@ -35,6 +42,12 @@ void AutoUpdateChecker::start()
     }
 
 #if defined(Q_OS_WIN32) || defined(Q_OS_DARWIN) || defined(STEAM_LINK) || defined(APP_IMAGE) // Only run update checker on platforms without auto-update
+    if (releaseAssetPrefix().isEmpty()) {
+        // MoonlightVibe publishes no build for this platform, so there is nothing to offer.
+        qDebug() << "No MoonlightVibe release build for this platform; skipping the update check";
+        return;
+    }
+
 #if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0) && QT_VERSION < QT_VERSION_CHECK(5, 15, 1) && !defined(QT_NO_BEARERMANAGEMENT)
     // HACK: Set network accessibility to work around QTBUG-80947 (introduced in Qt 5.14.0 and fixed in Qt 5.15.1)
     QT_WARNING_PUSH
@@ -44,8 +57,12 @@ void AutoUpdateChecker::start()
 #endif
 
     // We'll get a callback when this is finished
-    QUrl url("https://moonlight-stream.org/updates/qt.json");
+    QUrl url(k_LatestReleaseUrl);
     QNetworkRequest request(url);
+    // GitHub's API refuses requests without a User-Agent (HTTP 403).
+    request.setHeader(QNetworkRequest::UserAgentHeader,
+                      QString("MoonlightVibe/%1").arg(QString(VERSION_STR)));
+    request.setRawHeader("Accept", "application/vnd.github+json");
 #if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
     request.setAttribute(QNetworkRequest::Http2AllowedAttribute, true);
 #else
@@ -63,18 +80,23 @@ void AutoUpdateChecker::parseStringToVersionQuad(QString& string, QVector<int>& 
     }
 }
 
-QString AutoUpdateChecker::getPlatform()
+QString AutoUpdateChecker::releaseAssetPrefix()
 {
-#if defined(STEAM_LINK)
-    return QStringLiteral("steamlink");
-#elif defined(APP_IMAGE)
-    return QStringLiteral("appimage");
-#elif defined(Q_OS_DARWIN) && QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    // Qt 6 changed this from 'osx' to 'macos'. Use the old one
-    // to be consistent (and not require another entry in the manifest).
-    return QStringLiteral("osx");
+    // Must match the asset names the release workflows attach:
+    //   build-moonlightvibe-windows.yml -> MoonlightVibe-windows-x64-<version>.zip
+    //   build-moonlightvibe-mac.yml     -> MoonlightVibe-mac-<version>.dmg
+    // There are no Steam Link, AppImage or Windows ARM64 release builds.
+#if defined(STEAM_LINK) || defined(APP_IMAGE)
+    return QString();
+#elif defined(Q_OS_DARWIN)
+    return QStringLiteral("MoonlightVibe-mac-");
+#elif defined(Q_OS_WIN32)
+    if (QSysInfo::buildCpuArchitecture() == QStringLiteral("x86_64")) {
+        return QStringLiteral("MoonlightVibe-windows-x64-");
+    }
+    return QString();
 #else
-    return QSysInfo::productType();
+    return QString();
 #endif
 }
 
@@ -113,106 +135,79 @@ void AutoUpdateChecker::handleUpdateCheckRequestFinished(QNetworkReply* reply)
     m_Nam->deleteLater();
     m_Nam = nullptr;
 
-    if (reply->error() == QNetworkReply::NoError) {
-        QTextStream stream(reply);
-
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-        stream.setEncoding(QStringConverter::Utf8);
-#else
-        stream.setCodec("UTF-8");
-#endif
-
-        // Read all data and queue the reply for deletion
-        QString jsonString = stream.readAll();
-        reply->deleteLater();
-
-        QJsonParseError error;
-        QJsonDocument jsonDoc = QJsonDocument::fromJson(jsonString.toUtf8(), &error);
-        if (jsonDoc.isNull()) {
-            qWarning() << "Update manifest malformed:" << error.errorString();
-            return;
-        }
-
-        QJsonArray array = jsonDoc.array();
-        if (array.isEmpty()) {
-            qWarning() << "Update manifest doesn't contain an array";
-            return;
-        }
-
-        for (const auto& updateEntry : std::as_const(array)) {
-            if (updateEntry.isObject()) {
-                QJsonObject updateObj = updateEntry.toObject();
-                if (!updateObj.contains("platform") ||
-                        !updateObj.contains("arch") ||
-                        !updateObj.contains("version") ||
-                        !updateObj.contains("browser_url")) {
-                    qWarning() << "Update manifest entry missing vital field";
-                    continue;
-                }
-
-                if (!updateObj["platform"].isString() ||
-                        !updateObj["arch"].isString() ||
-                        !updateObj["version"].isString() ||
-                        !updateObj["browser_url"].isString()) {
-                    qWarning() << "Update manifest entry has unexpected vital field type";
-                    continue;
-                }
-
-                if (updateObj["arch"] == QSysInfo::buildCpuArchitecture() &&
-                        updateObj["platform"] == getPlatform()) {
-
-                    // Check the kernel version minimum if one exists
-                    if (updateObj.contains("kernel_version_at_least") && updateObj["kernel_version_at_least"].isString()) {
-                        QVector<int> requiredVersionQuad;
-                        QVector<int> actualVersionQuad;
-
-                        QString requiredVersion = updateObj["kernel_version_at_least"].toString();
-                        QString actualVersion = QSysInfo::kernelVersion();
-                        parseStringToVersionQuad(requiredVersion, requiredVersionQuad);
-                        parseStringToVersionQuad(actualVersion, actualVersionQuad);
-
-                        if (compareVersion(actualVersionQuad, requiredVersionQuad) < 0) {
-                            qDebug() << "Skipping manifest entry due to kernel version (" << actualVersion << "<" << requiredVersion << ")";
-                            continue;
-                        }
-                    }
-
-                    qDebug() << "Found update manifest match for current platform";
-
-                    QString latestVersion = updateObj["version"].toString();
-                    qDebug() << "Latest version of Moonlight for this platform is:" << latestVersion;
-
-                    QVector<int> latestVersionQuad;
-                    parseStringToVersionQuad(latestVersion, latestVersionQuad);
-
-                    int res = compareVersion(m_CurrentVersionQuad, latestVersionQuad);
-                    if (res < 0) {
-                        // m_CurrentVersionQuad < latestVersionQuad
-                        qDebug() << "Update available";
-                        emit onUpdateAvailable(updateObj["version"].toString(),
-                                               updateObj["browser_url"].toString());
-                        return;
-                    }
-                    else if (res > 0) {
-                        qDebug() << "Update manifest version lower than current version";
-                        return;
-                    }
-                    else {
-                        qDebug() << "Update manifest version equal to current version";
-                        return;
-                    }
-                }
-            }
-            else {
-                qWarning() << "Update manifest contained unrecognized entry:" << updateEntry.toString();
-            }
-        }
-
-        qWarning() << "No entry in update manifest found for current platform:"
-                   << QSysInfo::buildCpuArchitecture() << getPlatform() << QSysInfo::kernelVersion();
-    }
-    else {
+    if (reply->error() != QNetworkReply::NoError) {
         qWarning() << "Update checking failed with error:" << reply->error();
         reply->deleteLater();
+        return;
+    }
+
+    QByteArray body = reply->readAll();
+    reply->deleteLater();
+
+    QJsonParseError error;
+    QJsonDocument jsonDoc = QJsonDocument::fromJson(body, &error);
+    if (jsonDoc.isNull() || !jsonDoc.isObject()) {
+        qWarning() << "Latest release response malformed:" << error.errorString();
+        return;
+    }
+
+    // const: QJsonObject's non-const operator[] inserts missing keys.
+    const QJsonObject release = jsonDoc.object();
+    if (!release["tag_name"].isString() || !release["html_url"].isString() ||
+            !release["assets"].isArray()) {
+        qWarning() << "Latest release response missing tag_name, html_url or assets";
+        return;
+    }
+
+    // /releases/latest excludes these already; checked anyway so a future API change cannot turn a
+    // test build into an update prompt.
+    if (release["draft"].toBool() || release["prerelease"].toBool()) {
+        qDebug() << "Latest release is a draft or pre-release; not offering it";
+        return;
+    }
+
+    // Offer only a release that actually carries this platform's build. The Windows and macOS
+    // workflows attach their assets separately, so one may briefly exist without the other.
+    const QString prefix = releaseAssetPrefix();
+    bool hasAsset = false;
+    const QJsonArray assets = release["assets"].toArray();
+    for (const auto& asset : assets) {
+        const QJsonObject assetObj = asset.toObject();
+        if (assetObj["name"].toString().startsWith(prefix) &&
+                assetObj["state"].toString() == QStringLiteral("uploaded")) {
+            hasAsset = true;
+            break;
+        }
+    }
+    if (!hasAsset) {
+        qDebug() << "Latest release has no" << prefix << "asset yet; not offering it";
+        return;
+    }
+
+    // Tags are v<version>, e.g. v6.3.4; the release workflows refuse a tag that does not match
+    // app/version.txt.
+    QString latestVersion = release["tag_name"].toString();
+    if (latestVersion.startsWith('v') || latestVersion.startsWith('V')) {
+        latestVersion.remove(0, 1);
+    }
+    qDebug() << "Latest MoonlightVibe release is:" << latestVersion;
+
+    QVector<int> latestVersionQuad;
+    parseStringToVersionQuad(latestVersion, latestVersionQuad);
+    if (latestVersionQuad.count() < 2) {
+        qWarning() << "Latest release tag is not a version number:" << release["tag_name"].toString();
+        return;
+    }
+
+    int res = compareVersion(m_CurrentVersionQuad, latestVersionQuad);
+    if (res < 0) {
+        qDebug() << "Update available";
+        emit onUpdateAvailable(latestVersion, release["html_url"].toString());
+    }
+    else if (res > 0) {
+        qDebug() << "Latest release is older than this build";
+    }
+    else {
+        qDebug() << "This build is the latest release";
     }
 }

@@ -22,7 +22,9 @@ private:
 
     int compareVersion(QVector<int>& version1, QVector<int>& version2);
 
-    QString getPlatform();
+    // The start of this platform's asset name on a MoonlightVibe release, or an empty string when
+    // MoonlightVibe publishes no build for this platform.
+    QString releaseAssetPrefix();
 
     QVector<int> m_CurrentVersionQuad;
     QNetworkAccessManager* m_Nam;
