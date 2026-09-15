@@ -16,9 +16,16 @@ on:
       - '.github/ISSUE_TEMPLATE/**'
       - 'LICENSE'
   workflow_dispatch:
+    inputs:
+      sign:
+        description: 'Send this build to SignPath for signing (never publishes a release)'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
+  # Lets SignPath's action read job details and download the artifact it signs.
+  actions: read
 
 jobs:
   build:
@@ -90,18 +97,77 @@ jobs:
           echo "ZIP_PATH=$dst" >> $env:GITHUB_ENV
 
       - name: Upload artifact
+        id: upload
         uses: actions/upload-artifact@v5
-        # Non-fatal on a TAG build only. Observed 2026-09-08: this step failed with
-        # "Failed to FinalizeArtifact: (403) Forbidden: Error from intermediary" - transient
-        # GitHub artifact storage, with the build itself already green. Because "Create GitHub
-        # Release" runs after this step and has no always() guard, that failure would abort the
-        # job before publishing and leave a tag with no release.
+        # Non-fatal on a TAG build only, and only while signing is not configured. Observed
+        # 2026-09-08: this step failed with "Failed to FinalizeArtifact: (403) Forbidden: Error
+        # from intermediary" - transient GitHub artifact storage, with the build itself already
+        # green. Because "Create GitHub Release" runs after this step and has no always() guard,
+        # that failure would abort the job before publishing and leave a tag with no release.
         #
         # On master/workflow_dispatch this artifact is the ONLY output, so a failure there must
         # still fail the job - that is the signal a merge-verification build exists to give.
-        continue-on-error: ${{ startsWith(github.ref, 'refs/tags/') }}
+        #
+        # Once SignPath is configured, SignPath signs THIS artifact, so it must exist: a failed
+        # upload then fails the job rather than letting an unsigned release through.
+        continue-on-error: ${{ startsWith(github.ref, 'refs/tags/') && vars.SIGNPATH_ORGANIZATION_ID == '' }}
         with:
           name: MoonlightVibe-windows-x64-${{ steps.version.outputs.version }}
+          path: ${{ env.ZIP_PATH }}
+          if-no-files-found: error
+
+      - name: Sign with SignPath
+        id: sign
+        # Free code signing provided by SignPath.io, certificate by SignPath Foundation. SignPath
+        # signs MoonlightVibe.exe and AntiHooking.dll inside the portable zip and returns the zip;
+        # third-party DLLs are left as their projects ship them (SignPath Foundation terms).
+        #
+        # Inactive until the repository variable SIGNPATH_ORGANIZATION_ID exists, so builds behave
+        # as before until the SignPath project is set up. When active it runs for a release tag, or
+        # for a manual run with "sign" ticked. Every request waits for a person to approve it in
+        # SignPath, hence the long timeout. Any failure fails the job: no unsigned release.
+        #
+        # Pinned to the commit of tag v3 / v3.0, since this step handles the signing token.
+        if: vars.SIGNPATH_ORGANIZATION_ID != '' && (startsWith(github.ref, 'refs/tags/') || inputs.sign)
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          github-artifact-id: ${{ steps.upload.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 14400
+          output-artifact-directory: signed
+
+      - name: Verify signatures
+        if: steps.sign.outcome == 'success'
+        shell: pwsh
+        # Checks behaviour, not presence: open the zip SignPath returned and require a valid
+        # signature from SignPath Foundation on both files it was asked to sign. Only then does the
+        # release use the signed zip.
+        run: |
+          $zip = Get-ChildItem signed -Recurse -Filter "MoonlightVibe-windows-x64-*.zip" | Select-Object -First 1
+          if (-not $zip) { throw "SignPath returned no MoonlightVibe zip in .\signed" }
+          $check = Join-Path $env:RUNNER_TEMP 'signed-check'
+          Expand-Archive -LiteralPath $zip.FullName -DestinationPath $check -Force
+          foreach ($name in 'MoonlightVibe.exe', 'AntiHooking.dll') {
+            $file = Get-ChildItem $check -Recurse -Filter $name | Select-Object -First 1
+            if (-not $file) { throw "$name is missing from the signed zip" }
+            $sig = Get-AuthenticodeSignature $file.FullName
+            if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'SignPath Foundation') {
+              throw "$name is not validly signed by SignPath Foundation: $($sig.Status) $($sig.SignerCertificate.Subject)"
+            }
+            Write-Host "$name signed: $($sig.SignerCertificate.Subject)"
+          }
+          echo "ZIP_PATH=$($zip.FullName)" >> $env:GITHUB_ENV
+
+      - name: Upload signed artifact
+        # A manual signing test publishes nothing, so keep its result as an artifact to inspect.
+        if: steps.sign.outcome == 'success' && !startsWith(github.ref, 'refs/tags/')
+        uses: actions/upload-artifact@v5
+        with:
+          name: MoonlightVibe-windows-x64-${{ steps.version.outputs.version }}-signed
           path: ${{ env.ZIP_PATH }}
           if-no-files-found: error
 
