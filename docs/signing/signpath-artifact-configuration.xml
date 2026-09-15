@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Reference copy of the SignPath artifact configuration for the Windows release. The live copy is
+  edited in SignPath's web interface; keep the two identical.
+
+  What the build uploads (.github/workflows/build-moonlightvibe-windows.yml, "Upload artifact"):
+  a GitHub Actions artifact zip that holds the portable zip, which holds the program files.
+
+  Only files built from this repository are signed. Third-party DLLs (FFmpeg, SDL, OpenSSL, opus,
+  dav1d, libplacebo, discord-rpc) stay as their projects ship them, as the SignPath Foundation terms
+  require, and Qt's DLLs already carry The Qt Company's signature.
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <zip-file path="MoonlightVibe-windows-x64-*.zip">
+      <pe-file path="MoonlightVibe.exe" product-name="MoonlightVibe" max-matches="1">
+        <authenticode-sign />
+      </pe-file>
+      <pe-file path="AntiHooking.dll" max-matches="1">
+        <authenticode-sign />
+      </pe-file>
+    </zip-file>
+  </zip-file>
+</artifact-configuration>

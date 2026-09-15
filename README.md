@@ -40,6 +40,29 @@ Extract the zip and run `MoonlightVibe.exe` — no installer required, fully por
 
 ---
 
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by
+[SignPath Foundation](https://signpath.org).
+
+- **What is signed:** the two files built from this repository, `MoonlightVibe.exe` and
+  `AntiHooking.dll`, in the Windows release. They show "SignPath Foundation" as the publisher.
+- **What is not:** third-party libraries bundled from other open-source projects, such as FFmpeg,
+  SDL and OpenSSL, are included as those projects or their packagers provide them. Qt's libraries
+  carry The Qt Company's own signature.
+- **How:** every Windows release is built from this repository by GitHub Actions on GitHub-hosted
+  runners, and each signing request is approved by hand before it is signed.
+
+Team roles:
+
+- Committers and reviewers: [vibesoftwarecoder](https://github.com/vibesoftwarecoder)
+- Approvers: [vibesoftwarecoder](https://github.com/vibesoftwarecoder)
+
+Privacy: see [PRIVACY.md](PRIVACY.md). MoonlightVibe sends no data to us. It does contact some
+servers run by others, such as upstream Moonlight's update check, and that page lists each one.
+
+---
+
 ## MultiSeat seat auto-discovery
 
 When MultiSeat is running on the local machine, MoonlightVibe automatically discovers all active seats and lists each one as a separate server in the computer list. No manual host entry or port configuration needed — seats appear within ~15 seconds of becoming ready.
