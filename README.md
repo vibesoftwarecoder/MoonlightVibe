@@ -59,7 +59,7 @@ Team roles:
 - Approvers: [vibesoftwarecoder](https://github.com/vibesoftwarecoder)
 
 Privacy: see [PRIVACY.md](PRIVACY.md). MoonlightVibe sends no data to us. It does contact some
-servers run by others, such as upstream Moonlight's update check, and that page lists each one.
+servers run by others, such as GitHub for its update check, and that page lists each one.
 
 ---
 

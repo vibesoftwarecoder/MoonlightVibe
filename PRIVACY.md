@@ -20,13 +20,13 @@ every one, so you know what leaves your device and why.
 
 ## Connections to other servers
 
-These are inherited from upstream Moonlight. Each one reveals your IP address to the server it
+Most of these are inherited from upstream Moonlight. Each one reveals your IP address to the server it
 contacts, as any internet request does. None of them sends your hosts, your settings or anything
 you stream.
 
 | what | when | server | can you turn it off? |
 |---|---|---|---|
-| Update check | each time the app starts | `moonlight-stream.org` (run by the Moonlight project) | no |
+| Update check | each time the app starts, on Windows and macOS | `api.github.com` (GitHub), to read MoonlightVibe's latest release | no |
 | Game controller mappings | when controller support starts, downloaded only when a newer file exists | `moonlight-stream.org` | no |
 | Network connection test | when adding a host fails, or when a stream fails to start or drops, to tell you whether your network blocks streaming | `qt.conntest.moonlight-stream.org` | only the test after a failed "add host", with the setting "Automatically detect blocked connections" |
 | Discord Rich Presence | while you stream, only if the Discord app is installed | the Discord app on your device, which shares your activity with Discord | yes, in Settings. It is on by default |
