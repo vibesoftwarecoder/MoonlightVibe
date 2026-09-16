@@ -26,8 +26,15 @@ MultiSeatDiscovery::~MultiSeatDiscovery()
 void MultiSeatDiscovery::start()
 {
     m_Timer->start();
-    // Poll immediately on start, don't wait for first interval
-    poll();
+
+    // Poll soon after start rather than waiting a full interval, but from the event loop, never
+    // from inside start().
+    //
+    // ⛔ Do not call poll() directly here. ComputerManager::startPolling() calls start() while it
+    // holds m_Lock for write, and poll() emits aboutToPoll(), whose slot takes that same lock for
+    // read on the same thread. QReadWriteLock is not recursive, so the main thread waited on
+    // itself forever: 6.3.4 hung ("Not Responding") on every launch.
+    QMetaObject::invokeMethod(this, &MultiSeatDiscovery::poll, Qt::QueuedConnection);
 }
 
 void MultiSeatDiscovery::stop()
@@ -42,6 +49,11 @@ void MultiSeatDiscovery::setHostsToProbe(const QStringList& addresses)
 
 void MultiSeatDiscovery::poll()
 {
+    // The first poll is queued by start(). If stop() ran before it was delivered, do nothing.
+    if (!m_Timer->isActive()) {
+        return;
+    }
+
     // Refresh the address list first — hosts may have been added or removed since the last tick.
     emit aboutToPoll();
 
