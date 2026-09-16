@@ -397,6 +397,8 @@ void ComputerManager::startPolling()
     });
     connect(m_MultiSeatDiscovery, &MultiSeatDiscovery::aboutToPoll,
             this, &ComputerManager::updateMultiSeatProbeTargets);
+    // start() only queues the first poll. It must not poll synchronously: this function holds
+    // m_Lock for write, and updateMultiSeatProbeTargets() takes it for read.
     m_MultiSeatDiscovery->start();
 
     // Start polling threads for each known host
@@ -438,6 +440,9 @@ void ComputerManager::startPollingComputer(NvComputer* computer)
 // beside share one address — probing it twice would just double the requests for nothing. Local
 // addresses only: seat ports are not port-forwarded, so probing a remote address would be four
 // guaranteed failures per tick against someone else's network.
+//
+// ⛔ Takes m_Lock for read. It must never run on a thread that already holds m_Lock, because
+// QReadWriteLock is not recursive and that thread would wait on itself.
 void ComputerManager::updateMultiSeatProbeTargets()
 {
     if (m_MultiSeatDiscovery == nullptr) {
