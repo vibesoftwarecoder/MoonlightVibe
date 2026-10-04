@@ -72,14 +72,24 @@ echo Removing dSYM files from app bundle
 find $BUILD_FOLDER/app/MoonlightVibe.app/ -name '*.dSYM' | xargs rm -rf
 
 if [ "$SIGNING_IDENTITY" != "" ]; then
-  echo Signing app bundle
+  echo Signing app bundle with Developer ID identity
   codesign --force --deep --options runtime --timestamp --sign "$SIGNING_IDENTITY" $BUILD_FOLDER/app/MoonlightVibe.app || fail "Signing failed!"
+else
+  echo No signing identity configured - ad-hoc signing app bundle instead
+  codesign --force --deep --sign - $BUILD_FOLDER/app/MoonlightVibe.app || fail "Ad-hoc signing failed!"
 fi
 
 echo Creating DMG
 if [ "$SIGNING_IDENTITY" != "" ]; then
   create-dmg $BUILD_FOLDER/app/MoonlightVibe.app $INSTALLER_FOLDER --identity="$SIGNING_IDENTITY" --no-version-in-filename || fail "create-dmg failed!"
 else
+  # The app bundle above was ad-hoc signed (no certificate), not signed with a real Developer ID
+  # identity. create-dmg's --identity flag signs the .dmg container itself and expects a real
+  # signing identity, which ad-hoc signing cannot provide, so we deliberately do not pass it here.
+  # This is believed correct: Gatekeeper's "damaged and can't be opened" check runs against the
+  # app bundle's own signature at launch time, not the DMG container's signature, so ad-hoc
+  # signing the .app above is what fixes that failure mode. Leaving the DMG itself unsigned in
+  # this branch has not been verified end-to-end on a real Mac.
   create-dmg $BUILD_FOLDER/app/MoonlightVibe.app $INSTALLER_FOLDER --no-version-in-filename
   case $? in
     0) ;;
