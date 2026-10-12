@@ -242,6 +242,7 @@ HEADERS += \
     streaming/streamutils.h \
     backend/autoupdatechecker.h \
     path.h \
+    logging.h \
     settings/mappingmanager.h \
     gui/sdlgamepadkeynavigation.h \
     streaming/video/overlaymanager.h \

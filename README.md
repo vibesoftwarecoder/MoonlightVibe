@@ -77,6 +77,12 @@ MoonlightVibe streams your microphone to the host and plays it back through `Spe
 
 Requires [ApolloVibe](https://github.com/vibesoftwarecoder/ApolloVibe) on the host side with `stream_mic = enabled` in the seat config. MultiSeat enables this automatically.
 
+## Sharing diagnostic logs
+
+On Windows and macOS, open **Settings → Advanced Settings** and turn on **Enable detailed logging** before reproducing a problem. Then select **Open Log Folder** and attach the newest `Moonlight-*.log` file to your issue. Warning and error messages are logged even when detailed logging is off. The setting persists until you turn it off.
+
+Please review a log before sharing it: it may include your device or host names, network addresses, and details of your streaming session. Session encryption keys are removed automatically.
+
 ---
 
 ## Requirements

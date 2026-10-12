@@ -11,6 +11,7 @@
 #include <QFont>
 #include <QCursor>
 #include <QElapsedTimer>
+#include <QSettings>
 #include <QTemporaryFile>
 #include <QRegularExpression>
 
@@ -45,6 +46,7 @@
 #include "cli/pair.h"
 #include "cli/commandlineparser.h"
 #include "path.h"
+#include "logging.h"
 #include "utils.h"
 #include "gui/computermodel.h"
 #include "gui/appmodel.h"
@@ -77,9 +79,22 @@ static QElapsedTimer s_LoggerTime;
 static QTextStream s_LoggerStream(stderr);
 static QThreadPool s_LoggerThread;
 static QMutex s_SyncLoggerMutex;
-static bool s_SuppressVerboseOutput;
+static QAtomicInt s_SuppressVerboseOutput;
 static QRegularExpression k_RikeyRegex("&rikey=\\w+");
 static QRegularExpression k_RikeyIdRegex("&rikeyid=[\\d-]+");
+
+bool diagnosticLoggingEnabled()
+{
+    return !s_SuppressVerboseOutput.loadRelaxed();
+}
+
+void setDiagnosticLoggingEnabled(bool enabled)
+{
+    QSettings settings;
+    settings.setValue("diagnosticLoggingEnabled", enabled);
+    s_SuppressVerboseOutput.storeRelaxed(!enabled);
+    qInfo() << "Diagnostic logging" << (enabled ? "enabled" : "disabled");
+}
 #ifdef LOG_TO_FILE
 // Max log file size of 10 MB
 static const uint64_t k_MaxLogSizeBytes = 10 * 1024 * 1024;
@@ -444,6 +459,8 @@ int main(int argc, char *argv[])
         // Initialize paths for standard installation
         Path::initialize(false);
     }
+
+    s_SuppressVerboseOutput.storeRelaxed(!QSettings().value("diagnosticLoggingEnabled", false).toBool());
 
     // Override the default QML cache directory with the one we chose
     if (qEnvironmentVariableIsEmpty("QML_DISK_CACHE_PATH")) {
