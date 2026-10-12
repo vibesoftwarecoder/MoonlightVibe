@@ -1952,6 +1952,34 @@ Flickable {
                                   qsTr("You can toggle it at any time while streaming using Ctrl+Alt+Shift+S or Select+L1+R1+X.") + "\n\n" +
                                   qsTr("The performance overlay is not supported on Steam Link or Raspberry Pi.")
                 }
+
+                CheckBox {
+                    id: diagnosticLoggingCheck
+                    width: parent.width
+                    visible: SystemProperties.logFilesAvailable
+                    text: qsTr("Enable detailed logging")
+                    font.pointSize: 12
+                    checked: SystemProperties.diagnosticLoggingEnabled
+                    onClicked: SystemProperties.setDiagnosticLoggingEnabled(checked)
+
+                    ToolTip.delay: 1000
+                    ToolTip.timeout: 5000
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Record detailed diagnostic messages for support. Warning and error logs are always recorded. Logs may contain host names and network addresses, so review them before sharing. Log files are limited to 10 MB and the 10 newest files are kept.")
+                }
+
+                Label {
+                    width: parent.width
+                    visible: SystemProperties.logFilesAvailable
+                    text: qsTr("Turn this on before reproducing a problem, then attach the newest Moonlight-*.log file to your issue.")
+                    wrapMode: Text.Wrap
+                }
+
+                Button {
+                    visible: SystemProperties.logFilesAvailable && SystemProperties.hasDesktopEnvironment
+                    text: qsTr("Open Log Folder")
+                    onClicked: SystemProperties.openLogFolder()
+                }
             }
         }
     }

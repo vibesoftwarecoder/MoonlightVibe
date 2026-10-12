@@ -1,8 +1,12 @@
 #include "systemproperties.h"
 #include "utils.h"
+#include "logging.h"
+#include "path.h"
 
+#include <QDesktopServices>
 #include <QGuiApplication>
 #include <QLibraryInfo>
+#include <QUrl>
 
 #include "streaming/session.h"
 #include "streaming/streamutils.h"
@@ -51,6 +55,12 @@ SystemProperties::SystemProperties()
     isRunningWayland = WMUtils::isRunningWayland();
     isRunningXWayland = isRunningWayland && QGuiApplication::platformName() == "xcb";
     usesMaterial3Theme = QLibraryInfo::version() >= QVersionNumber(6, 5, 0);
+
+#if defined(Q_OS_WIN32) || (!defined(QT_DEBUG) && defined(Q_OS_DARWIN))
+    logFilesAvailable = true;
+#else
+    logFilesAvailable = false;
+#endif
 
 #ifdef Q_OS_DARWIN
     isDarwin = true;
@@ -114,6 +124,24 @@ SystemProperties::SystemProperties()
 SystemProperties::~SystemProperties()
 {
     waitForAsyncLoad();
+}
+
+bool SystemProperties::diagnosticLoggingEnabled() const
+{
+    return ::diagnosticLoggingEnabled();
+}
+
+void SystemProperties::setDiagnosticLoggingEnabled(bool enabled)
+{
+    if (diagnosticLoggingEnabled() != enabled) {
+        ::setDiagnosticLoggingEnabled(enabled);
+        emit diagnosticLoggingEnabledChanged();
+    }
+}
+
+bool SystemProperties::openLogFolder()
+{
+    return QDesktopServices::openUrl(QUrl::fromLocalFile(Path::getLogDir()));
 }
 
 void SystemProperties::updateDecoderProperties(bool hasHardwareAcceleration, bool rendererAlwaysFullScreen, QSize maximumResolution, bool supportsHdr)

@@ -26,6 +26,8 @@ public:
     Q_PROPERTY(bool hasDiscordIntegration MEMBER hasDiscordIntegration CONSTANT)
     Q_PROPERTY(bool usesMaterial3Theme MEMBER usesMaterial3Theme CONSTANT)
     Q_PROPERTY(QString versionString MEMBER versionString CONSTANT)
+    Q_PROPERTY(bool logFilesAvailable MEMBER logFilesAvailable CONSTANT)
+    Q_PROPERTY(bool diagnosticLoggingEnabled READ diagnosticLoggingEnabled NOTIFY diagnosticLoggingEnabledChanged)
 
     // Properties queried asynchronously (startAsyncLoad() must be called!)
     Q_PROPERTY(bool hasHardwareAcceleration MEMBER hasHardwareAcceleration NOTIFY hasHardwareAccelerationChanged)
@@ -42,6 +44,9 @@ public:
     Q_INVOKABLE void startAsyncLoad();
     Q_INVOKABLE void waitForAsyncLoad();
     Q_INVOKABLE void refreshDisplays();
+    Q_INVOKABLE void setDiagnosticLoggingEnabled(bool enabled);
+    Q_INVOKABLE bool openLogFolder();
+    bool diagnosticLoggingEnabled() const;
 
 signals:
     void unmappedGamepadsChanged();
@@ -49,6 +54,7 @@ signals:
     void rendererAlwaysFullScreenChanged();
     void maximumResolutionChanged();
     void supportsHdrChanged();
+    void diagnosticLoggingEnabledChanged();
 
 private slots:
     void updateDecoderProperties(bool hasHardwareAcceleration, bool rendererAlwaysFullScreen, QSize maximumResolution, bool supportsHdr);
@@ -68,6 +74,7 @@ private:
     QString versionString;
     bool usesMaterial3Theme;
     bool isDarwin;
+    bool logFilesAvailable;
 
     // Properties only set if startAsyncLoad() is called
     bool hasHardwareAcceleration;
