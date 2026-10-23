@@ -2,9 +2,13 @@
 
 // Derived from qiin2333/moonlight-qt (GPL-3.0).
 
+#include "usbforwardingelevation.h"
+
 #include <QObject>
 #include <QString>
 #include <QVariantList>
+#include <functional>
+#include <memory>
 
 // USB device sharing orchestration (Windows only; usbipd-win does the
 // sharing). Lists devices from `usbipd state` JSON, and binds or unbinds
@@ -23,6 +27,9 @@
 //   description   device description
 //   instanceId    Windows instance ID (USB\VID_XXXX&PID_YYYY\...)
 //   vidPid        "xxxx:yyyy"
+//   identity      stable identity for the settings list: "xxxx:yyyy", or
+//                 "xxxx:yyyy#serial" when the device has a real serial number.
+//                 Unlike busId it does not change when the device moves port.
 //   isBound       bool, PersistedGuid is not empty
 //   isConnected   bool, present in the current listing
 //   isAttached    bool, in use by a client right now
@@ -53,6 +60,30 @@ public:
     // validated bus id or GUID. Return an empty string for invalid input.
     static QString bindArguments(const QString &busId);
     static QString unbindArguments(const QString &busId, const QString &persistedGuid);
+    // Stable device identity from a Windows instance ID (see "identity" above).
+    // Empty when the instance ID has no usable VID/PID.
+    // NOTE for the settings UI: two devices of the same model that have no
+    // serial number share the identity "vid:pid". Selecting one selects all
+    // such twins, and the UI has to say so.
+    static QString identityFromInstanceId(const QString &instanceId);
+
+#ifdef USBFWD_TESTING
+    // Test seams, compiled only into the unit tests (USBFWD_TESTING is defined
+    // in their .pro files, never in the application). Hooks are process wide;
+    // pass a default-constructed value to restore production behaviour.
+    struct TestHooks
+    {
+        std::function<QString()> locateUsbipd;            // replaces the usbipd.exe lookup
+        UsbForwarding::ElevatedLauncher launcher;         // replaces the elevated launch
+        std::function<void()> refresh;                    // replaces refresh()
+        int elevationTimeoutMs = 0;                       // 0 = production value
+        int elevationHardLimitMs = 0;                     // 0 = production value
+    };
+    static void setTestHooks(TestHooks hooks);
+    // Tests make their own instances (the application uses get()).
+    explicit UsbForwardingBackend(QObject *parent = nullptr);
+#endif
+    ~UsbForwardingBackend() override;
 
     Q_INVOKABLE void refresh();
     Q_INVOKABLE void bind(const QString &busId);
@@ -69,14 +100,26 @@ signals:
     void operationFinished(bool success, const QString &message);
 
 private:
+#ifndef USBFWD_TESTING
     explicit UsbForwardingBackend(QObject *parent = nullptr);
+#endif
+    struct DeliveryLink;
+    void reportSlow();
 
     void setBusy(bool busy);
     void setError(const QString &error);
-    // Runs the validated usbipd.exe elevated with the given fixed arguments.
+    // Runs the validated usbipd.exe elevated with the given fixed arguments on
+    // a worker thread (the UAC prompt and the wait never block the caller) and
+    // reports the real result through operationFinished(). On success the
+    // device list is refreshed from usbipd; on failure it is left alone.
     void runElevated(const QString &arguments, const QString &successMessage);
+
+    void finishElevated(const UsbForwarding::ElevationResult &result, const QString &successMessage);
 
     QVariantList m_Devices;
     bool m_Busy = false;
+    bool m_SlowReported = false;
     QString m_Error;
+    // Lets the elevation worker post its result without racing our deletion.
+    std::shared_ptr<DeliveryLink> m_Link;
 };

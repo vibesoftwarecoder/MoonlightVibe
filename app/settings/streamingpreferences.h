@@ -179,6 +179,8 @@ public:
     Q_PROPERTY(UIDisplayMode uiDisplayMode MEMBER uiDisplayMode NOTIFY uiDisplayModeChanged)
     Q_PROPERTY(bool swapMouseButtons MEMBER swapMouseButtons NOTIFY mouseButtonsChanged)
     Q_PROPERTY(bool muteOnFocusLoss MEMBER muteOnFocusLoss NOTIFY muteOnFocusLossChanged)
+    Q_PROPERTY(bool usbForwardingEnabled MEMBER usbForwardingEnabled NOTIFY usbForwardingEnabledChanged)
+    Q_PROPERTY(QStringList usbForwardingAutoDevices MEMBER usbForwardingAutoDevices NOTIFY usbForwardingAutoDevicesChanged)
     Q_PROPERTY(bool backgroundGamepad MEMBER backgroundGamepad NOTIFY backgroundGamepadChanged)
     Q_PROPERTY(bool reverseScrollDirection MEMBER reverseScrollDirection NOTIFY reverseScrollDirectionChanged)
     Q_PROPERTY(bool swapFaceButtons MEMBER swapFaceButtons NOTIFY swapFaceButtonsChanged)
@@ -223,6 +225,10 @@ public:
     QString microphoneDevice;
     bool swapMouseButtons;
     bool muteOnFocusLoss;
+    // USB forwarding (Windows only, default off). Auto devices are stable
+    // identities ("vid:pid" or "vid:pid#serial"), never bus ids.
+    bool usbForwardingEnabled;
+    QStringList usbForwardingAutoDevices;
     bool backgroundGamepad;
     bool reverseScrollDirection;
     bool swapFaceButtons;
@@ -277,6 +283,8 @@ signals:
     void microphoneMonitorSignalDetectedChanged();
     void mouseButtonsChanged();
     void muteOnFocusLossChanged();
+    void usbForwardingEnabledChanged();
+    void usbForwardingAutoDevicesChanged();
     void backgroundGamepadChanged();
     void reverseScrollDirectionChanged();
     void swapFaceButtonsChanged();

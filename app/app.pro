@@ -209,6 +209,8 @@ SOURCES += \
     backend/usbforwardingtunnel.cpp \
     backend/usbforwardingenvironment.cpp \
     backend/usbforwardingbackend.cpp \
+    backend/usbforwardingelevation.cpp \
+    backend/usbforwardingmanager.cpp \
     wm.cpp
 
 HEADERS += \
@@ -254,7 +256,9 @@ HEADERS += \
     backend/usbforwardingcapability.h \
     backend/pairedcertificate.h \
     backend/usbforwardingenvironment.h \
-    backend/usbforwardingbackend.h
+    backend/usbforwardingbackend.h \
+    backend/usbforwardingelevation.h \
+    backend/usbforwardingmanager.h
 
 # Platform-specific renderers and decoders
 ffmpeg {
