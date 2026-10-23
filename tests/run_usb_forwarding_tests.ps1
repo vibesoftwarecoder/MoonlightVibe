@@ -8,7 +8,8 @@ param(
     [Parameter(Mandatory = $true)][string]$OutDir,
     [string[]]$Tests = @('usb_forwarding_capability', 'usb_forwarding_environment',
                          'usb_forwarding_backend_list', 'usb_forwarding_tunnel', 'usb_forwarding_tunnel_clientcert',
-                         'usb_forwarding_nvhttp'),
+                         'usb_forwarding_nvhttp', 'usb_forwarding_manager', 'usb_forwarding_elevation',
+                         'usb_forwarding_keepalive'),
     [string]$QtDir = 'C:\Qt\6.10.3\msvc2022_64',
     [string]$VcVars = 'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat',
     [string]$OpenSsl = 'C:\Program Files\Git\usr\bin\openssl.exe'

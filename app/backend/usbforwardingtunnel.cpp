@@ -14,12 +14,82 @@
 #include <QTimer>
 #include <QTcpSocket>
 
+#ifdef Q_OS_WIN
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <mstcpip.h>
+#ifdef _MSC_VER
+#pragma comment(lib, "ws2_32.lib")
+#endif
+#endif
+
 namespace UsbForwarding {
 
 namespace {
 /* Stop reading from one side while the other side is this far behind. TCP
  * back-pressures the USB/IP peer instead of us buffering without limit. */
 constexpr qint64 kHighWaterMark = 4 * 1024 * 1024;
+
+#ifdef Q_OS_WIN
+/* Older SDK headers lack these; the numbers are fixed by Windows 10 1709+. */
+#ifndef TCP_KEEPIDLE
+#define TCP_KEEPIDLE 3
+#endif
+#ifndef TCP_KEEPCNT
+#define TCP_KEEPCNT 16
+#endif
+#ifndef TCP_KEEPINTVL
+#define TCP_KEEPINTVL 17
+#endif
+
+bool setTcpInt(SOCKET s, int option, int value)
+{
+    return ::setsockopt(s, IPPROTO_TCP, option, reinterpret_cast<const char *>(&value), sizeof(value)) == 0;
+}
+
+int getTcpInt(SOCKET s, int level, int option)
+{
+    int value = 0;
+    int length = sizeof(value);
+    if (::getsockopt(s, level, option, reinterpret_cast<char *>(&value), &length) != 0) {
+        return 0;
+    }
+    return value;
+}
+#endif
+
+/* Turn on keepalive with the configured timing and report what the OS holds. */
+KeepAliveReport applyKeepAlive(QAbstractSocket *socket, const TunnelConfig &config)
+{
+    KeepAliveReport report;
+    socket->setSocketOption(QAbstractSocket::KeepAliveOption, 1);
+#ifdef Q_OS_WIN
+    const SOCKET s = static_cast<SOCKET>(socket->socketDescriptor());
+    if (s != INVALID_SOCKET) {
+        const bool timed = setTcpInt(s, TCP_KEEPIDLE, config.keepAliveIdleSec) &&
+                           setTcpInt(s, TCP_KEEPINTVL, config.keepAliveIntervalSec) &&
+                           setTcpInt(s, TCP_KEEPCNT, config.keepAliveCount);
+        if (!timed) {
+            /* Pre-1709 fallback: idle and interval only; the probe count is fixed. */
+            tcp_keepalive vals = {};
+            vals.onoff = 1;
+            vals.keepalivetime = static_cast<ULONG>(config.keepAliveIdleSec) * 1000;
+            vals.keepaliveinterval = static_cast<ULONG>(config.keepAliveIntervalSec) * 1000;
+            DWORD returned = 0;
+            ::WSAIoctl(s, SIO_KEEPALIVE_VALS, &vals, sizeof(vals), nullptr, 0, &returned, nullptr, nullptr);
+        }
+        report.enabled = getTcpInt(s, SOL_SOCKET, SO_KEEPALIVE) != 0;
+        report.idleSec = getTcpInt(s, IPPROTO_TCP, TCP_KEEPIDLE);
+        report.intervalSec = getTcpInt(s, IPPROTO_TCP, TCP_KEEPINTVL);
+        report.count = getTcpInt(s, IPPROTO_TCP, TCP_KEEPCNT);
+        return report;
+    }
+#else
+    Q_UNUSED(config);
+#endif
+    report.enabled = socket->socketOption(QAbstractSocket::KeepAliveOption).toInt() != 0;
+    return report;
+}
 
 /* The host's error text is untrusted: it must never reach the user as free
  * text (it could be markup or an attempt to impersonate system messages).
@@ -58,6 +128,9 @@ bool TunnelConfig::valid() const noexcept
         return false;
     }
     if (startupTimeoutMs <= 0) {
+        return false;
+    }
+    if (keepAliveIdleSec <= 0 || keepAliveIntervalSec <= 0 || keepAliveCount <= 0) {
         return false;
     }
     /* The local hop is plaintext USB/IP: it must stay on this machine. */
@@ -184,7 +257,13 @@ bool TunnelWorker::start(QString *error)
     connect(m_Remote, &QSslSocket::readyRead, this, &TunnelWorker::handleRemoteReadyRead);
     connect(m_Remote, &QSslSocket::disconnected, this, [this] { finishCleanly(); });
 #if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
-    connect(m_Remote, &QSslSocket::errorOccurred, this, [this](QAbstractSocket::SocketError) {
+    connect(m_Remote, &QSslSocket::errorOccurred, this, [this](QAbstractSocket::SocketError socketError) {
+        if (m_HandshakeDone && (socketError == QAbstractSocket::SocketTimeoutError ||
+                                  socketError == QAbstractSocket::NetworkError)) {
+            /* Keepalive probes went unanswered: the host is gone. */
+            failWith(Tunnel::tr("The host stopped responding."));
+            return;
+        }
         failWith(
             Tunnel::tr("The connection to the host was lost: %1").arg(m_Remote->errorString()));
     });
@@ -300,6 +379,12 @@ void TunnelWorker::handleRemoteReadyRead()
         }
         m_HandshakeDone = true;
         m_StartupTimer->stop();
+        {
+            const KeepAliveReport report = applyKeepAlive(m_Remote, m_Config);
+            if (m_Config.onKeepAliveApplied) {
+                m_Config.onKeepAliveApplied(report);
+            }
+        }
         emit forwarding();
         if (m_Finished)
             return;

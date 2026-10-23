@@ -12,13 +12,38 @@
 #include <QProcess>
 #include <QRegularExpression>
 #include <QTimer>
-
-#ifdef Q_OS_WIN
-#include <windows.h>
-#include <shellapi.h>
-#endif
+#include <mutex>
+#include <thread>
 
 namespace {
+
+// Elevation can sit behind a UAC prompt for a long time; the wait is on a
+// worker thread, so a generous bound costs nothing.
+constexpr int kElevationTimeoutMs = 2 * 60 * 1000;
+
+constexpr int kElevationHardLimitMs = 10 * 60 * 1000;
+
+#ifdef USBFWD_TESTING
+std::mutex s_HooksMutex;
+UsbForwardingBackend::TestHooks s_Hooks;
+
+UsbForwardingBackend::TestHooks currentHooks()
+{
+    std::lock_guard<std::mutex> lock(s_HooksMutex);
+    return s_Hooks;
+}
+#endif
+
+QString locateUsbipdOrHook()
+{
+#ifdef USBFWD_TESTING
+    const auto hooks = currentHooks();
+    if (hooks.locateUsbipd) {
+        return hooks.locateUsbipd();
+    }
+#endif
+    return UsbForwardingEnvironment::locateUsbipd();
+}
 
 // Parses "USB\VID_054C&PID_0CE6\..." into "054c:0ce6".
 QString vidPidFromInstanceId(const QString &instanceId)
@@ -32,10 +57,56 @@ QString vidPidFromInstanceId(const QString &instanceId)
     }
     return vidMatch.captured(1).toLower() + QLatin1Char(':') + pidMatch.captured(1).toLower();
 }
-
 } // namespace
 
-UsbForwardingBackend::UsbForwardingBackend(QObject *parent) : QObject(parent) {}
+#ifdef USBFWD_TESTING
+void UsbForwardingBackend::setTestHooks(TestHooks hooks)
+{
+    std::lock_guard<std::mutex> lock(s_HooksMutex);
+    s_Hooks = std::move(hooks);
+}
+#endif
+
+struct UsbForwardingBackend::DeliveryLink
+{
+    std::mutex mutex;
+    UsbForwardingBackend *backend = nullptr;
+};
+
+// Identity of a device across ports and reboots. A device with a real serial
+// number gets "vid:pid#serial". A device WITHOUT one gets plain "vid:pid", so
+// serial-less twins of the same model are indistinguishable and share it.
+QString UsbForwardingBackend::identityFromInstanceId(const QString &instanceId)
+{
+    const QString vidPid = vidPidFromInstanceId(instanceId);
+    if (vidPid.isEmpty()) {
+        return QString();
+    }
+    // "USB\VID_xxxx&PID_yyyy\<third>": a real serial number has no '&'.
+    // Windows invents ids such as "5&1a2b&0&2" for devices without a serial;
+    // those depend on the port, so they are not an identity.
+    const QStringList parts = instanceId.split(QLatin1Char('\\'));
+    if (parts.size() >= 3) {
+        static const QRegularExpression serialRe(QStringLiteral("\\A[0-9A-Za-z._-]{1,64}\\z"));
+        const QString serial = parts.at(2);
+        if (serialRe.match(serial).hasMatch()) {
+            return vidPid + QLatin1Char('#') + serial.toLower();
+        }
+    }
+    return vidPid;
+}
+
+UsbForwardingBackend::UsbForwardingBackend(QObject *parent)
+    : QObject(parent), m_Link(std::make_shared<DeliveryLink>())
+{
+    m_Link->backend = this;
+}
+
+UsbForwardingBackend::~UsbForwardingBackend()
+{
+    std::lock_guard<std::mutex> lock(m_Link->mutex);
+    m_Link->backend = nullptr;
+}
 
 UsbForwardingBackend *UsbForwardingBackend::get()
 {
@@ -112,6 +183,7 @@ QVariantList UsbForwardingBackend::parseUsbipdState(const QByteArray &stateJson,
         device.insert(QStringLiteral("description"), description);
         device.insert(QStringLiteral("instanceId"), instanceId);
         device.insert(QStringLiteral("vidPid"), vidPidFromInstanceId(instanceId));
+        device.insert(QStringLiteral("identity"), identityFromInstanceId(instanceId));
         device.insert(QStringLiteral("isBound"), isBound);
         device.insert(QStringLiteral("isConnected"), isConnected);
         device.insert(QStringLiteral("isAttached"), isAttached);
@@ -146,8 +218,17 @@ void UsbForwardingBackend::refresh()
     if (m_Busy) {
         return;
     }
+#ifdef USBFWD_TESTING
+    {
+        const auto hooks = currentHooks();
+        if (hooks.refresh) {
+            hooks.refresh();
+            return;
+        }
+    }
+#endif
 #ifdef Q_OS_WIN
-    const QString exe = UsbForwardingEnvironment::locateUsbipd();
+    const QString exe = locateUsbipdOrHook();
     if (exe.isEmpty()) {
         m_Devices.clear();
         emit devicesChanged();
@@ -207,30 +288,88 @@ void UsbForwardingBackend::refresh()
 void UsbForwardingBackend::runElevated(const QString &arguments, const QString &successMessage)
 {
 #ifdef Q_OS_WIN
-    const QString exe = UsbForwardingEnvironment::locateUsbipd();
+    if (m_Busy) {
+        emit operationFinished(false, tr("Another USB operation is still running."));
+        return;
+    }
+    const QString exe = locateUsbipdOrHook();
     if (exe.isEmpty()) {
         emit operationFinished(false, tr("usbipd-win is not installed."));
         return;
     }
     // "exe" is the validated absolute path; "arguments" came from
     // bindArguments()/unbindArguments(). Nothing else reaches the UAC prompt.
-    const std::wstring wideExe = QDir::toNativeSeparators(exe).toStdWString();
-    const std::wstring wideArgs = arguments.toStdWString();
-    const std::wstring wideDir = QDir::toNativeSeparators(QFileInfo(exe).absolutePath()).toStdWString();
-    const HINSTANCE result = ShellExecuteW(nullptr, L"runas", wideExe.c_str(), wideArgs.c_str(),
-                                           wideDir.c_str(), SW_HIDE);
-    const bool ok = reinterpret_cast<INT_PTR>(result) > 32;
-    if (ok) {
-        emit operationFinished(true, successMessage);
-        QTimer::singleShot(1500, this, [this] { refresh(); });
-    } else {
-        emit operationFinished(false, tr("The elevation was cancelled or failed."));
+    const QString workDir = QFileInfo(exe).absolutePath();
+    UsbForwarding::ElevatedLauncher launcher = UsbForwarding::launchElevated;
+    int timeoutMs = kElevationTimeoutMs;
+    int hardLimitMs = kElevationHardLimitMs;
+#ifdef USBFWD_TESTING
+    {
+        const auto hooks = currentHooks();
+        if (hooks.launcher) launcher = hooks.launcher;
+        if (hooks.elevationTimeoutMs > 0) timeoutMs = hooks.elevationTimeoutMs;
+        if (hooks.elevationHardLimitMs > 0) hardLimitMs = hooks.elevationHardLimitMs;
     }
+#endif
+
+    setBusy(true);
+    m_SlowReported = false;
+    // A plain detached thread, not a thread pool: the application must be able
+    // to quit while a UAC prompt is still open, and a pool would make exit wait
+    // for it. Results come back through the link, which the destructor clears
+    // under the same lock, so delivery can never touch a deleted backend.
+    const std::shared_ptr<DeliveryLink> link = m_Link;
+    const auto deliver = [link](std::function<void(UsbForwardingBackend *)> call) {
+        std::lock_guard<std::mutex> lock(link->mutex);
+        if (UsbForwardingBackend *backend = link->backend) {
+            QMetaObject::invokeMethod(backend, [backend, call] { call(backend); }, Qt::QueuedConnection);
+        }
+    };
+    std::thread([deliver, launcher, exe, arguments, workDir, timeoutMs, hardLimitMs, successMessage] {
+        // Blocks this thread for as long as the UAC prompt and usbipd take.
+        const UsbForwarding::ElevationResult result = launcher(
+            exe, arguments, workDir, timeoutMs, hardLimitMs,
+            [deliver] { deliver([](UsbForwardingBackend *b) { b->reportSlow(); }); });
+        deliver([result, successMessage](UsbForwardingBackend *b) { b->finishElevated(result, successMessage); });
+    }).detach();
 #else
     Q_UNUSED(arguments);
     Q_UNUSED(successMessage);
     emit operationFinished(false, tr("USB forwarding is not supported on this platform."));
 #endif
+}
+
+void UsbForwardingBackend::reportSlow()
+{
+    // The process may still change usbipd's state: stay busy (no second
+    // elevated operation can start) until it really exits.
+    m_SlowReported = true;
+    emit operationFinished(false, tr("usbipd is still running; the device list will update when it finishes."));
+}
+
+void UsbForwardingBackend::finishElevated(const UsbForwarding::ElevationResult &result,
+                                          const QString &successMessage)
+{
+    const bool slowReported = m_SlowReported;
+    m_SlowReported = false;
+    setBusy(false);
+    if (result.timedOut) {
+        if (!slowReported) {
+            emit operationFinished(false, tr("usbipd is still running; the device list will update when it finishes."));
+        }
+        // It exited late, or we gave up waiting: either way look at the real state now.
+        refresh();
+    } else if (result.succeeded()) {
+        emit operationFinished(true, successMessage);
+        // The list reflects what usbipd now says, not a guess at how long it takes.
+        refresh();
+    } else if (result.launched) {
+        emit operationFinished(false, tr("usbipd failed (exit %1).").arg(result.exitCode));
+    } else if (result.cancelled) {
+        emit operationFinished(false, tr("The elevation was cancelled."));
+    } else {
+        emit operationFinished(false, tr("The elevation was cancelled or failed."));
+    }
 }
 
 void UsbForwardingBackend::bind(const QString &busId)
@@ -243,7 +382,7 @@ void UsbForwardingBackend::bind(const QString &busId)
         emit operationFinished(false, tr("This USB device cannot be shared."));
         return;
     }
-    runElevated(arguments, tr("Requested sharing. Refreshing device list..."));
+    runElevated(arguments, tr("The device is now shared."));
 }
 
 void UsbForwardingBackend::unbind(const QString &busId, const QString &persistedGuid)
@@ -256,5 +395,5 @@ void UsbForwardingBackend::unbind(const QString &busId, const QString &persisted
         emit operationFinished(false, tr("This USB device cannot be unshared."));
         return;
     }
-    runElevated(arguments, tr("Requested stop sharing. Refreshing device list..."));
+    runElevated(arguments, tr("The device is no longer shared."));
 }

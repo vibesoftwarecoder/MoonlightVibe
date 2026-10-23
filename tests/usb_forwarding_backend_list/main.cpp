@@ -163,6 +163,40 @@ private slots:
         QVERIFY(!spy.at(0).at(0).toBool());
         QVERIFY(!spy.at(1).at(0).toBool());
     }
+
+    void identityIsStableAcrossPortsAndUsesARealSerial_data()
+    {
+        QTest::addColumn<QString>("instanceId");
+        QTest::addColumn<QString>("expected");
+        // Windows-invented ids contain '&' and change with the port: no serial.
+        QTest::newRow("generated id") << QStringLiteral("USB\\VID_054C&PID_0CE6\\5&1&0&2") << QStringLiteral("054c:0ce6");
+        QTest::newRow("same device other port") << QStringLiteral("USB\\VID_054C&PID_0CE6\\6&2a3c&0&4") << QStringLiteral("054c:0ce6");
+        QTest::newRow("real serial") << QStringLiteral("USB\\VID_0781&PID_5581\\4C530001230101105424")
+                                     << QStringLiteral("0781:5581#4c530001230101105424");
+        QTest::newRow("serial case folded") << QStringLiteral("USB\\VID_0781&PID_5581\\AbC-123_x.y")
+                                            << QStringLiteral("0781:5581#abc-123_x.y");
+        QTest::newRow("no third part") << QStringLiteral("USB\\VID_0001&PID_0002") << QStringLiteral("0001:0002");
+        QTest::newRow("odd characters in the serial") << QStringLiteral("USB\\VID_0001&PID_0002\\a b;c") << QStringLiteral("0001:0002");
+        QTest::newRow("no vid/pid") << QStringLiteral("ROOT\\HUB\\0000") << QString();
+        QTest::newRow("empty") << QString() << QString();
+    }
+    void identityIsStableAcrossPortsAndUsesARealSerial()
+    {
+        QFETCH(QString, instanceId);
+        QFETCH(QString, expected);
+        QCOMPARE(UsbForwardingBackend::identityFromInstanceId(instanceId), expected);
+    }
+
+    void listedDevicesCarryTheirIdentity()
+    {
+        const QVariantMap device = onlyDevice(
+            R"({"Devices":[{"BusId":"1-2","ClientIPAddress":null,"Description":"Stick",)"
+            R"("InstanceId":"USB\\VID_0781&PID_5581\\ABC123","IsForced":false,)"
+            R"("PersistedGuid":"9b6a62f8-0123-4567-89ab-0123456789ab","StubInstanceId":null}]})");
+        QCOMPARE(device.value("identity").toString(), QStringLiteral("0781:5581#abc123"));
+        // The bus id is NOT part of it: it changes when the device moves.
+        QVERIFY(!device.value("identity").toString().contains(QStringLiteral("1-2")));
+    }
 };
 
 QTEST_MAIN(BackendListTest)

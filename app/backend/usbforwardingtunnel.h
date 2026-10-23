@@ -30,9 +30,20 @@
 #include <QSslCertificate>
 #include <QSslConfiguration>
 #include <QString>
+#include <functional>
 #include <memory>
 
 namespace UsbForwarding {
+
+/* What the OS reports for the remote socket after keepalive was applied.
+ * Delivered on the tunnel's worker thread; for diagnostics and tests. */
+struct KeepAliveReport
+{
+    bool enabled = false;
+    int idleSec = 0;      // 0 when the platform could not report it
+    int intervalSec = 0;
+    int count = 0;
+};
 
 struct TunnelConfig
 {
@@ -54,6 +65,16 @@ struct TunnelConfig
 
     /* Startup deadline in milliseconds; tests shorten it. */
     int startupTimeoutMs = 15 * 1000;
+
+    /* TCP keepalive on the remote socket once the handshake is done. A host
+     * that vanishes without closing is noticed after about
+     * idle + interval * count seconds (60 s by default). There is deliberately
+     * no idle-bytes timer: a quiet USB device is normal. */
+    int keepAliveIdleSec = 30;
+    int keepAliveIntervalSec = 5;
+    int keepAliveCount = 6;
+    /* Called once, on the worker thread, after keepalive was applied. */
+    std::function<void(const KeepAliveReport &)> onKeepAliveApplied;
 
     bool valid() const noexcept;
 };
