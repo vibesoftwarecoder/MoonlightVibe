@@ -1,4 +1,5 @@
 #include "nvcomputer.h"
+#include "pairedcertificate.h"
 #include <Limelight.h>
 
 #include <QDebug>
@@ -11,6 +12,7 @@
 #include <QImageReader>
 #include <QtEndian>
 #include <QNetworkProxy>
+#include <memory>
 
 #define FAST_FAIL_TIMEOUT_MS 2000
 #define REQUEST_TIMEOUT_MS 5000
@@ -454,6 +456,35 @@ void NvHTTP::handleSslErrors(QNetworkReply* reply, const QList<QSslError>& error
     }
 }
 
+UsbForwarding::Capability NvHTTP::getUsbForwardingCapability()
+{
+    // Derived from qiin2333/moonlight-qt (GPL-3.0).
+    if (m_ServerCert.isNull() || m_BaseUrlHttps.port(0) == 0) {
+        throw GfeHttpResponseException(401, "USB forwarding requires a paired host");
+    }
+    // The bounded openConnection() pins the exact paired certificate, refuses
+    // redirects and caps the response size. The token in the reply must never
+    // reach a host that is not the paired one.
+    std::unique_ptr<QNetworkReply> reply(openConnection(m_BaseUrlHttps,
+        "api/v1/usb-forwarding", nullptr, REQUEST_TIMEOUT_MS, NvLogLevel::NVLL_NONE,
+        UsbForwarding::kMaxHandshakeBytes));
+    // A normally trusted certificate may not emit sslErrors at all. Require
+    // the paired leaf certificate even on that path before accepting credentials.
+    if (!PairedCertificate::matches(m_ServerCert, reply->sslConfiguration().peerCertificate())) {
+        throw QtNetworkReplyException(QNetworkReply::SslHandshakeFailedError,
+                                      "USB forwarding host certificate mismatch");
+    }
+    if (reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() != 200) {
+        throw GfeHttpResponseException(400, "USB capability request failed");
+    }
+    // Never log the body: it carries the tunnel token.
+    const auto capability = UsbForwarding::Capability::parse(reply->readAll());
+    if (!capability) {
+        throw GfeHttpResponseException(400, "Invalid USB capability response");
+    }
+    return *capability;
+}
+
 QString
 NvHTTP::openConnectionToString(QUrl baseUrl,
                                QString command,
@@ -483,10 +514,17 @@ NvHTTP::openConnection(QUrl baseUrl,
                        QString command,
                        QString arguments,
                        int timeoutMs,
-                       NvLogLevel logLevel)
+                       NvLogLevel logLevel,
+                       qint64 maxResponseBytes)
 {
     // Port must be set
     Q_ASSERT(baseUrl.port(0) != 0);
+
+    // A bounded request (maxResponseBytes > 0) carries credentials back to us,
+    // so it gets extra protection: no redirects, a response size cap and a
+    // check that the peer is exactly the paired certificate. Unbounded
+    // requests behave exactly as before.
+    const bool bounded = maxResponseBytes > 0;
 
     // Build a URL for the request
     QUrl url(baseUrl);
@@ -498,6 +536,12 @@ NvHTTP::openConnection(QUrl baseUrl,
                  ((arguments != nullptr) ? ("&" + arguments) : ""));
 
     QNetworkRequest request(url);
+
+    if (bounded) {
+        // Never forward the request to another URL.
+        request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                             QNetworkRequest::ManualRedirectPolicy);
+    }
 
     // Add our client certificate
     request.setSslConfiguration(IdentityManager::get()->getSslConfig());
@@ -518,8 +562,25 @@ NvHTTP::openConnection(QUrl baseUrl,
 #endif
 
     auto sslErrorsConnection = connect(m_Nam, &QNetworkAccessManager::sslErrors, this, &NvHTTP::handleSslErrors);
+    QMetaObject::Connection pinnedConnection;
+    if (bounded) {
+        // A normally trusted peer may produce no sslErrors, so also check the
+        // pin before any HTTP data is sent.
+        pinnedConnection = PairedCertificate::enforce(m_Nam, this, m_ServerCert);
+    }
     QNetworkReply* reply = m_Nam->get(request);
     QEventLoop loop;
+
+    bool oversized = false;
+    if (bounded) {
+        reply->setReadBufferSize(maxResponseBytes + 1);
+        connect(reply, &QNetworkReply::readyRead, &loop, [&] {
+            if (reply->bytesAvailable() > maxResponseBytes) {
+                oversized = true;
+                reply->abort();
+            }
+        });
+    }
 
     // Connect the quit signals
     connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
@@ -567,6 +628,31 @@ NvHTTP::openConnection(QUrl baseUrl,
     m_Nam->clearAccessCache();
 #endif
     disconnect(sslErrorsConnection);
+
+    if (bounded) {
+        disconnect(pinnedConnection);
+
+        // The pin check comes first: a pin mismatch aborts the reply, which
+        // would otherwise be reported as a timeout.
+        // A request that never reached a TLS peer (refused, timed out) keeps
+        // its own error below.
+        const QSslCertificate peerCertificate = reply->sslConfiguration().peerCertificate();
+        if ((reply->error() == QNetworkReply::NoError || !peerCertificate.isNull()) &&
+            !PairedCertificate::matches(m_ServerCert, peerCertificate)) {
+            delete reply;
+            throw QtNetworkReplyException(QNetworkReply::SslHandshakeFailedError,
+                                          "Server certificate mismatch");
+        }
+        if (oversized || reply->bytesAvailable() > maxResponseBytes) {
+            delete reply;
+            throw GfeHttpResponseException(400, "Host response too large");
+        }
+        const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        if (status >= 300 && status < 400) {
+            delete reply;
+            throw GfeHttpResponseException(status, "Host redirects are not allowed");
+        }
+    }
 
     // Handle error
     if (reply->error() != QNetworkReply::NoError)

@@ -3,6 +3,7 @@
 #include "identitymanager.h"
 #include "nvapp.h"
 #include "nvaddress.h"
+#include "usbforwardingcapability.h"
 
 #include <Limelight.h>
 
@@ -141,6 +142,14 @@ public:
                            int timeoutMs,
                            NvLogLevel logLevel = NvLogLevel::NVLL_VERBOSE);
 
+    // Asks the paired host whether USB forwarding is available and, if so,
+    // for the tunnel port and token (GET /api/v1/usb-forwarding). Pins the
+    // exact paired certificate, allows no redirects and no more than 4096
+    // response bytes. Throws GfeHttpResponseException or
+    // QtNetworkReplyException on any failure, including an unpaired host.
+    UsbForwarding::Capability
+    getUsbForwardingCapability();
+
     void setServerCert(QSslCertificate serverCert);
     void setAddress(NvAddress address);
     void setHttpsPort(uint16_t port);
@@ -193,7 +202,8 @@ private:
                    QString command,
                    QString arguments,
                    int timeoutMs,
-                   NvLogLevel logLevel);
+                   NvLogLevel logLevel,
+                   qint64 maxResponseBytes = 0);
 
     NvAddress m_Address;
     QNetworkAccessManager* m_Nam;

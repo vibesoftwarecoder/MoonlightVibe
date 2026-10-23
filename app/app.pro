@@ -50,7 +50,7 @@ win32 {
     }
 
     INCLUDEPATH += $$PWD/../libs/windows/include
-    LIBS += ws2_32.lib winmm.lib dxva2.lib ole32.lib gdi32.lib user32.lib d3d9.lib dwmapi.lib dbghelp.lib
+    LIBS += ws2_32.lib winmm.lib dxva2.lib ole32.lib gdi32.lib user32.lib d3d9.lib dwmapi.lib dbghelp.lib advapi32.lib shell32.lib
 }
 macx:!disable-prebuilts {
     !exists($$PWD/../libs/mac) {
@@ -206,6 +206,9 @@ SOURCES += \
     gui/sdlgamepadkeynavigation.cpp \
     streaming/video/overlaymanager.cpp \
     backend/systemproperties.cpp \
+    backend/usbforwardingtunnel.cpp \
+    backend/usbforwardingenvironment.cpp \
+    backend/usbforwardingbackend.cpp \
     wm.cpp
 
 HEADERS += \
@@ -246,7 +249,12 @@ HEADERS += \
     settings/mappingmanager.h \
     gui/sdlgamepadkeynavigation.h \
     streaming/video/overlaymanager.h \
-    backend/systemproperties.h
+    backend/systemproperties.h \
+    backend/usbforwardingtunnel.h \
+    backend/usbforwardingcapability.h \
+    backend/pairedcertificate.h \
+    backend/usbforwardingenvironment.h \
+    backend/usbforwardingbackend.h
 
 # Platform-specific renderers and decoders
 ffmpeg {
