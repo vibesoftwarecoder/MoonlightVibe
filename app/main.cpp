@@ -53,6 +53,8 @@
 #include "backend/autoupdatechecker.h"
 #include "backend/computermanager.h"
 #include "backend/systemproperties.h"
+#include "backend/usbforwardingbackend.h"
+#include "backend/usbforwardingenvironment.h"
 #include "streaming/session.h"
 #include "settings/streamingpreferences.h"
 #include "gui/sdlgamepadkeynavigation.h"
@@ -976,6 +978,23 @@ int main(int argc, char *argv[])
                                                    [](QQmlEngine* qmlEngine, QJSEngine*) -> QObject* {
                                                        return StreamingPreferences::get(qmlEngine);
                                                    });
+
+    // USB forwarding (the settings section is shown on Windows only). Both are
+    // process-wide objects that are never deleted, so QML must not own them.
+    qmlRegisterSingletonType<UsbForwardingBackend>("UsbForwardingBackend", 1, 0,
+                                                   "UsbForwardingBackend",
+                                                   [](QQmlEngine*, QJSEngine*) -> QObject* {
+                                                       QObject* backend = UsbForwardingBackend::get();
+                                                       QQmlEngine::setObjectOwnership(backend, QQmlEngine::CppOwnership);
+                                                       return backend;
+                                                   });
+    qmlRegisterSingletonType<UsbForwardingEnvironment>("UsbForwardingEnvironment", 1, 0,
+                                                       "UsbForwardingEnvironment",
+                                                       [](QQmlEngine*, QJSEngine*) -> QObject* {
+                                                           QObject* environment = UsbForwardingEnvironment::get();
+                                                           QQmlEngine::setObjectOwnership(environment, QQmlEngine::CppOwnership);
+                                                           return environment;
+                                                       });
 
     // Create the identity manager on the main thread
     IdentityManager::get();

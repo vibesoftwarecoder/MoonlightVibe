@@ -22,6 +22,8 @@ class UsbForwardingEnvironment : public QObject
     Q_PROPERTY(State state READ state NOTIFY stateChanged)
     Q_PROPERTY(QString usbipdVersion READ usbipdVersion NOTIFY stateChanged)
     Q_PROPERTY(bool checking READ checking NOTIFY checkingChanged)
+    Q_PROPERTY(bool ready READ ready NOTIFY stateChanged)
+    Q_PROPERTY(QString statusText READ statusText NOTIFY stateChanged)
 
 public:
     enum State
@@ -80,10 +82,17 @@ public:
     static QString readinessError(State state);
 
     Q_INVOKABLE void refresh();
+    // Kills and deletes any probe that is still running. Called on application
+    // quit (and by the destructor), so no QProcess outlives the application.
+    void shutdown();
+    ~UsbForwardingEnvironment() override;
 
     State state() const { return m_State; }
     QString usbipdVersion() const { return m_Version; }
     bool checking() const { return m_Checking; }
+    bool ready() const { return m_State == Ready; }
+    // Plain text for the settings page (see usbforwardinguilogic.h).
+    QString statusText() const;
 
 signals:
     void stateChanged();

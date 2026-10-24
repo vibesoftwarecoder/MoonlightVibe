@@ -458,19 +458,42 @@ private:
         });
     }
 
+    /* Asks which devices usbipd is sharing. The lister can wait on a process
+     * for seconds, so it runs on a pool thread, never on this event loop:
+     * stop() must not wait for it. A late answer finds no engine, or an id
+     * that is no longer expected, and is dropped. */
     void reconcile()
     {
-        QList<SharedDevice> shared;
-        try {
-            if (m_Seams.listDevices) {
-                shared = m_Seams.listDevices();
-            }
-        } catch (...) {
-            shared.clear();
-        }
         if (!m_Running || m_Paused) {
-            return; // stopped or paused from inside the device lister
+            return;
         }
+        const quint64 id = ++m_ListSeq;
+        m_ExpectedList = id;
+        const DeviceLister lister = m_Seams.listDevices;
+        const std::shared_ptr<Link> link = m_Link;
+        QThreadPool::globalInstance()->start([lister, link, id] {
+            QList<SharedDevice> shared;
+            try {
+                if (lister) {
+                    shared = lister();
+                }
+            } catch (...) {
+                shared.clear();
+            }
+            std::lock_guard<std::mutex> lock(link->mutex);
+            if (Engine *engine = link->engine) {
+                QMetaObject::invokeMethod(
+                    engine, [engine, id, shared] { engine->onListed(id, shared); }, Qt::QueuedConnection);
+            }
+        });
+    }
+
+    void onListed(quint64 id, const QList<SharedDevice> &shared)
+    {
+        if (!m_Running || m_Paused || id != m_ExpectedList) {
+            return; // stale: stopped, paused, or a newer listing replaced it
+        }
+        m_ExpectedList = 0;
         /* NotShared rows hold no resources: rebuild them from the current list. */
         m_Devs.erase(std::remove_if(m_Devs.begin(), m_Devs.end(),
                                     [](const std::unique_ptr<Dev> &d) { return d->state == DeviceState::NotShared; }),
@@ -640,6 +663,7 @@ private:
     void teardown()
     {
         m_ExpectedFetch = 0;
+        m_ExpectedList = 0;
         m_FetchTimer->stop();
         for (auto &dev : m_Devs) {
             if (dev->retry != nullptr) {
@@ -678,6 +702,8 @@ private:
     std::vector<std::unique_ptr<TunnelHandle>> m_Graveyard;
     quint64 m_FetchSeq = 0;
     quint64 m_ExpectedFetch = 0;
+    quint64 m_ListSeq = 0;
+    quint64 m_ExpectedList = 0;
     int m_CapFailures = 0;
     int m_Rechecks = 0;
     bool m_Started = false;
@@ -725,12 +751,23 @@ Snapshot Manager::snapshot() const
     return m_Shared->snapshot;
 }
 
+void Manager::abandonListing() noexcept
+{
+    try {
+        if (m_Seams.abandonListing) {
+            m_Seams.abandonListing();
+        }
+    } catch (...) {
+    }
+}
+
 void Manager::teardownLocked()
 {
     if (!m_Runtime) {
         return;
     }
     m_Running = false;
+    abandonListing();
     if (m_Runtime->thread.isRunning()) {
         Engine *engine = m_Runtime->engine;
         QMetaObject::invokeMethod(engine, [engine] { engine->stopAll(); }, Qt::BlockingQueuedConnection);
@@ -788,6 +825,7 @@ void Manager::stop() noexcept
         QThread *worker = m_WorkerThread.load();
         if (worker != nullptr && QThread::currentThread() == worker) {
             m_Running = false;
+            abandonListing();
             static_cast<Engine *>(m_WorkerEngine.load())->requestStop();
             return;
         }

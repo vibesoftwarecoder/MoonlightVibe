@@ -1,7 +1,9 @@
 // Derived from qiin2333/moonlight-qt (GPL-3.0).
 
 #include "usbforwardingenvironment.h"
+#include "usbforwardinguilogic.h"
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
 #include <QProcess>
@@ -246,9 +248,42 @@ UsbForwardingEnvironment::UsbForwardingEnvironment(QObject *parent)
 {
 }
 
+UsbForwardingEnvironment::~UsbForwardingEnvironment()
+{
+    shutdown();
+}
+
+void UsbForwardingEnvironment::shutdown()
+{
+    const QList<QProcess *> probes = findChildren<QProcess *>(QString(), Qt::FindDirectChildrenOnly);
+    for (QProcess *probe : probes) {
+        probe->disconnect();
+        if (probe->state() != QProcess::NotRunning) {
+            probe->kill();
+            probe->waitForFinished(1000);
+        }
+        delete probe;
+    }
+    if (m_Checking) {
+        m_Checking = false;
+        m_State = CheckFailed;
+        emit checkingChanged();
+        emit stateChanged();
+    }
+}
+
 UsbForwardingEnvironment* UsbForwardingEnvironment::get()
 {
+    // A function-local static is destroyed after the application object is gone,
+    // so a probe still running at exit is stopped from aboutToQuit instead.
     static UsbForwardingEnvironment environment;
+    static const bool wired = [] {
+        if (QCoreApplication *app = QCoreApplication::instance()) {
+            QObject::connect(app, &QCoreApplication::aboutToQuit, &environment, [] { environment.shutdown(); });
+        }
+        return true;
+    }();
+    Q_UNUSED(wired)
     return &environment;
 }
 
@@ -515,6 +550,11 @@ UsbForwardingEnvironment::State UsbForwardingEnvironment::probeServices()
 #else
     return Unsupported;
 #endif
+}
+
+QString UsbForwardingEnvironment::statusText() const
+{
+    return UsbForwarding::Ui::environmentStatusText(m_State, m_Version);
 }
 
 QString UsbForwardingEnvironment::readinessError(State state)

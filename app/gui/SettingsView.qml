@@ -7,6 +7,8 @@ import StreamingPreferences 1.0
 import ComputerManager 1.0
 import SdlGamepadKeyNavigation 1.0
 import SystemProperties 1.0
+import UsbForwardingBackend 1.0
+import UsbForwardingEnvironment 1.0
 
 Flickable {
     id: settingsPage
@@ -1067,6 +1069,172 @@ Flickable {
                           (StreamingPreferences.microphoneMonitorSignalDetected ?
                                qsTr("Input detected on the selected microphone.") :
                                qsTr("No microphone input detected yet."))
+                }
+            }
+        }
+
+        GroupBox {
+            id: usbForwardingGroupBox
+            width: (parent.width - (parent.leftPadding + parent.rightPadding))
+            padding: 12
+            visible: SystemProperties.usbForwardingAvailable
+            title: "<font color=\"skyblue\">" + qsTr("USB forwarding") + "</font>"
+            font.pointSize: 12
+
+            Column {
+                id: usbForwardingColumn
+                anchors.fill: parent
+                spacing: 5
+
+                // The last result of Share / Stop sharing, in plain words
+                property string usbMessage: ""
+                // True once a refresh has been requested (so an empty list means something)
+                property bool usbRefreshed: false
+
+                function refreshUsb() {
+                    UsbForwardingEnvironment.refresh()
+                    UsbForwardingBackend.refresh()
+                    usbRefreshed = true
+                }
+
+                Component.onCompleted: {
+                    if (SystemProperties.usbForwardingAvailable && StreamingPreferences.usbForwardingEnabled) {
+                        refreshUsb()
+                    }
+                }
+
+                Connections {
+                    target: UsbForwardingBackend
+
+                    function onOperationFinished(success, message) {
+                        usbForwardingColumn.usbMessage = message
+                    }
+                }
+
+                CheckBox {
+                    id: usbForwardingEnabledCheck
+                    width: parent.width
+                    text: qsTr("Forward USB devices to the host while streaming")
+                    font.pointSize: 12
+                    checked: StreamingPreferences.usbForwardingEnabled
+                    onCheckedChanged: {
+                        StreamingPreferences.usbForwardingEnabled = checked
+                        if (checked) {
+                            usbForwardingColumn.refreshUsb()
+                        }
+                    }
+
+                    ToolTip.delay: 1000
+                    ToolTip.timeout: 5000
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("When this is on, the devices you pick below are sent to the host PC every time you start a stream. Nothing is forwarded while this is off.")
+                }
+
+                Label {
+                    width: parent.width
+                    wrapMode: Text.Wrap
+                    font.pointSize: 10
+                    text: qsTr("The host must be running ApolloVibe with USB forwarding turned on, and it must allow this device (client) to forward USB. The host decides: if it does not allow it, nothing is forwarded and the stream is not affected.")
+                }
+
+                Label {
+                    width: parent.width
+                    wrapMode: Text.Wrap
+                    font.pointSize: 10
+                    text: qsTr("Forwarded devices appear on the host as if they were plugged in there. While a device is forwarded it is not available on this PC. Press Ctrl+Alt+Shift+U while streaming to pause or resume forwarding.")
+                }
+
+                Label {
+                    width: parent.width
+                    wrapMode: Text.Wrap
+                    font.pointSize: 10
+                    text: UsbForwardingEnvironment.statusText
+                }
+
+                Label {
+                    width: parent.width
+                    wrapMode: Text.Wrap
+                    font.pointSize: 10
+                    visible: UsbForwardingBackend.error !== ""
+                    text: UsbForwardingBackend.error
+                }
+
+                Label {
+                    width: parent.width
+                    wrapMode: Text.Wrap
+                    font.pointSize: 10
+                    visible: usbForwardingColumn.usbMessage !== ""
+                    text: usbForwardingColumn.usbMessage
+                }
+
+                Label {
+                    width: parent.width
+                    wrapMode: Text.Wrap
+                    font.pointSize: 10
+                    text: qsTr("Sharing or unsharing a device shows a Windows permission prompt (administrator approval). Two devices of the same model without a serial number have the same identity, so choosing one of them chooses both.")
+                }
+
+                Button {
+                    text: qsTr("Refresh")
+                    enabled: !UsbForwardingBackend.busy && !UsbForwardingEnvironment.checking
+                    onClicked: usbForwardingColumn.refreshUsb()
+                }
+
+                Label {
+                    width: parent.width
+                    wrapMode: Text.Wrap
+                    font.pointSize: 10
+                    visible: usbForwardingColumn.usbRefreshed && !UsbForwardingBackend.busy &&
+                             UsbForwardingBackend.error === "" && UsbForwardingBackend.devices.length === 0
+                    text: qsTr("No USB devices found. Press Refresh after installing usbipd-win or plugging in a device.")
+                }
+
+                Repeater {
+                    model: UsbForwardingBackend.devices
+
+                    Column {
+                        id: usbDevice
+                        width: parent.width
+                        spacing: 3
+
+                        // modelData is one entry of the backend's device list
+                        property var device: modelData
+
+                        Label {
+                            width: parent.width
+                            wrapMode: Text.Wrap
+                            font.pointSize: 12
+                            text: (usbDevice.device.description !== "" ? usbDevice.device.description : qsTr("Unknown USB device")) +
+                                  "  [" + (usbDevice.device.identity !== "" ? usbDevice.device.identity : qsTr("no identity")) + "]  " +
+                                  UsbForwardingBackend.shareStateText(usbDevice.device)
+                        }
+
+                        Row {
+                            spacing: 5
+
+                            Button {
+                                text: qsTr("Share")
+                                enabled: !UsbForwardingBackend.busy && UsbForwardingBackend.canShare(usbDevice.device)
+                                onClicked: UsbForwardingBackend.bind(usbDevice.device.busId)
+                            }
+
+                            Button {
+                                text: qsTr("Stop sharing")
+                                enabled: !UsbForwardingBackend.busy && UsbForwardingBackend.canStopSharing(usbDevice.device)
+                                onClicked: UsbForwardingBackend.unbind(usbDevice.device.busId, usbDevice.device.persistedGuid)
+                            }
+                        }
+
+                        CheckBox {
+                            width: parent.width
+                            text: qsTr("Forward automatically when streaming")
+                            font.pointSize: 10
+                            enabled: usbDevice.device.identity !== ""
+                            checked: UsbForwardingBackend.autoDevicesContain(StreamingPreferences.usbForwardingAutoDevices, usbDevice.device.identity)
+                            onClicked: StreamingPreferences.usbForwardingAutoDevices =
+                                       UsbForwardingBackend.autoDevicesWith(StreamingPreferences.usbForwardingAutoDevices, usbDevice.device.identity, checked)
+                        }
+                    }
                 }
             }
         }

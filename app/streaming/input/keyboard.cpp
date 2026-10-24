@@ -177,6 +177,14 @@ void SdlInputHandler::performSpecialKeyCombo(KeyCombo combo)
         updateKeyboardGrabState();
         break;
 
+    case KeyComboToggleUsbForwarding:
+        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                    "Detected USB forwarding toggle combo");
+
+        // Pauses or resumes USB forwarding. Does nothing if it is not running.
+        Session::get()->toggleUsbForwarding();
+        break;
+
     default:
         Q_UNREACHABLE();
     }

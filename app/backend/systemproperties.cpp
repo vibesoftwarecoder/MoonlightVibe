@@ -62,6 +62,12 @@ SystemProperties::SystemProperties()
     logFilesAvailable = false;
 #endif
 
+#ifdef Q_OS_WIN
+    usbForwardingAvailable = true;
+#else
+    usbForwardingAvailable = false;
+#endif
+
 #ifdef Q_OS_DARWIN
     isDarwin = true;
 #else
