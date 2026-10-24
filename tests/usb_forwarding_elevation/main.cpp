@@ -319,6 +319,29 @@ private slots:
         QCOMPARE(hooked.refreshes->load(), 0);
     }
 
+    void destroyingTheBackendWithARunningProbeIsQuietAndFast()
+    {
+        static QStringList warnings;
+        warnings.clear();
+        const QtMessageHandler previous = qInstallMessageHandler(
+            [](QtMsgType, const QMessageLogContext &, const QString &message) { warnings.append(message); });
+        auto *backend = new UsbForwardingBackend;
+        auto *probe = new QProcess(backend);   // stands in for the `usbipd state` probe
+        probe->start(QStringLiteral("C:/Windows/System32/PING.EXE"),
+                     { QStringLiteral("-n"), QStringLiteral("60"), QStringLiteral("127.0.0.1") });
+        const bool started = probe->waitForStarted(5000);
+        QElapsedTimer timer;
+        timer.start();
+        delete backend;                        // the application is exiting mid-probe
+        const qint64 elapsed = timer.elapsed();
+        qInstallMessageHandler(previous);
+        if (!started) {
+            QSKIP("could not start PING.EXE in this environment");
+        }
+        QVERIFY2(warnings.isEmpty(), qPrintable(warnings.join(QLatin1Char('|'))));
+        QVERIFY2(elapsed < 3000, qPrintable(QString::number(elapsed)));
+    }
+
     // ---- the real wait, with the non-elevating "open" verb ---------------
 
     void launchAndWaitReadsTheRealExitCode()

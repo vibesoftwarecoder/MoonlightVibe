@@ -3,7 +3,9 @@
 #include "usbforwardingbackend.h"
 #include "usbforwardingcapability.h"
 #include "usbforwardingenvironment.h"
+#include "usbforwardinguilogic.h"
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -104,13 +106,39 @@ UsbForwardingBackend::UsbForwardingBackend(QObject *parent)
 
 UsbForwardingBackend::~UsbForwardingBackend()
 {
+    shutdown();
     std::lock_guard<std::mutex> lock(m_Link->mutex);
     m_Link->backend = nullptr;
 }
 
+void UsbForwardingBackend::shutdown()
+{
+    const QList<QProcess *> probes = findChildren<QProcess *>(QString(), Qt::FindDirectChildrenOnly);
+    for (QProcess *probe : probes) {
+        probe->disconnect();
+        if (probe->state() != QProcess::NotRunning) {
+            probe->kill();
+            probe->waitForFinished(1000);
+        }
+        delete probe;
+    }
+    if (!probes.isEmpty()) {
+        m_Busy = false;
+    }
+}
+
 UsbForwardingBackend *UsbForwardingBackend::get()
 {
+    // A function-local static is destroyed after the application object is gone,
+    // so a probe still running at exit is stopped from aboutToQuit instead.
     static UsbForwardingBackend backend;
+    static const bool wired = [] {
+        if (QCoreApplication *app = QCoreApplication::instance()) {
+            QObject::connect(app, &QCoreApplication::aboutToQuit, &backend, [] { backend.shutdown(); });
+        }
+        return true;
+    }();
+    Q_UNUSED(wired)
     return &backend;
 }
 
@@ -193,6 +221,31 @@ QVariantList UsbForwardingBackend::parseUsbipdState(const QByteArray &stateJson,
         devices.append(device);
     }
     return devices;
+}
+
+QString UsbForwardingBackend::shareStateText(const QVariantMap &device) const
+{
+    return UsbForwarding::Ui::deviceShareStateText(UsbForwarding::Ui::deviceShareState(device));
+}
+
+bool UsbForwardingBackend::canShare(const QVariantMap &device) const
+{
+    return UsbForwarding::Ui::canShare(device);
+}
+
+bool UsbForwardingBackend::canStopSharing(const QVariantMap &device) const
+{
+    return UsbForwarding::Ui::canStopSharing(device);
+}
+
+bool UsbForwardingBackend::autoDevicesContain(const QStringList &list, const QString &identity) const
+{
+    return UsbForwarding::Ui::autoDevicesContain(list, identity);
+}
+
+QStringList UsbForwardingBackend::autoDevicesWith(const QStringList &list, const QString &identity, bool on) const
+{
+    return UsbForwarding::Ui::autoDevicesWith(list, identity, on);
 }
 
 void UsbForwardingBackend::setBusy(bool busy)

@@ -211,6 +211,8 @@ SOURCES += \
     backend/usbforwardingbackend.cpp \
     backend/usbforwardingelevation.cpp \
     backend/usbforwardingmanager.cpp \
+    backend/usbforwardingsessionglue.cpp \
+    backend/usbforwardingsessionseams.cpp \
     wm.cpp
 
 HEADERS += \
@@ -258,7 +260,10 @@ HEADERS += \
     backend/usbforwardingenvironment.h \
     backend/usbforwardingbackend.h \
     backend/usbforwardingelevation.h \
-    backend/usbforwardingmanager.h
+    backend/usbforwardingmanager.h \
+    backend/usbforwardingsessionglue.h \
+    backend/usbforwardingsessionseams.h \
+    backend/usbforwardinguilogic.h
 
 # Platform-specific renderers and decoders
 ffmpeg {

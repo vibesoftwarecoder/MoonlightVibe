@@ -292,6 +292,22 @@ private slots:
         QCOMPARE(env->state(), Env::CheckFailed);
     }
 
+    void applicationQuitStopsARunningProbe()
+    {
+        Env *env = Env::get();
+        env->probeWith(QStringLiteral("C:/Windows/System32/PING.EXE"),
+                       { QStringLiteral("-n"), QStringLiteral("60"), QStringLiteral("127.0.0.1") }, 60000);
+        QVERIFY(env->checking());
+        QCOMPARE(env->findChildren<QProcess *>().size(), 1);
+        QElapsedTimer timer;
+        timer.start();
+        QMetaObject::invokeMethod(QCoreApplication::instance(), "aboutToQuit");   // a private signal: call it by name
+        QVERIFY2(timer.elapsed() < 3000, qPrintable(QString::number(timer.elapsed())));
+        QVERIFY(!env->checking());
+        QCOMPARE(env->findChildren<QProcess *>().size(), 0);
+        QVERIFY(env->state() != Env::Checking);
+    }
+
     void failingVersionProbeMeansStoppedService()
     {
         Env *env = Env::get();

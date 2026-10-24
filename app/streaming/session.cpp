@@ -4,6 +4,10 @@
 #include <QSettings>
 #include "backend/richpresencemanager.h"
 #include "streaming/audio/capture/microphonecapture.h"
+#include "backend/identitymanager.h"
+#include "backend/usbforwardingsessionglue.h"
+#include "backend/usbforwardingsessionseams.h"
+#include <QReadWriteLock>
 
 #include <Limelight.h>
 #include "SDL_compat.h"
@@ -588,7 +592,10 @@ Session::Session(NvComputer* computer, NvApp& app, StreamingPreferences *prefere
       m_AudioSampleCount(0),
       m_DropAudioEndTime(0),
       m_MicrophoneCapture(nullptr),
-      m_MicrophoneEnabled(false)
+      m_MicrophoneEnabled(false),
+      m_UsbForwarding(nullptr),
+      m_UsbForwardingRevision(0),
+      m_UsbForwardingLastPoll(0)
 {
 }
 
@@ -596,6 +603,9 @@ Session::~Session()
 {
     // NB: This may not get destroyed for a long time! Don't put any non-trivial cleanup here.
     // Use Session::exec() or DeferredSessionCleanupTask instead.
+
+    // exec() already did this on every path; this is only a safety net (a null check).
+    destroyUsbForwarding();
 
     SDL_DestroyMutex(m_DecoderLock);
 }
@@ -1660,6 +1670,7 @@ bool Session::startConnectionAsync()
     }
 
     QByteArray hostnameStr = m_Computer->activeAddress.address().toUtf8();
+    m_StreamHostAddress = m_Computer->activeAddress.address();
     QByteArray siAppVersion = m_Computer->appVersion.toUtf8();
 
     SERVER_INFORMATION hostInfo;
@@ -1838,6 +1849,113 @@ void Session::destroyMicrophoneCapture()
     }
 
     m_MicrophoneEnabled = false;
+}
+
+void Session::startUsbForwarding()
+{
+#ifdef Q_OS_WIN
+    if (m_UsbForwarding != nullptr || !m_Preferences->usbForwardingEnabled) {
+        return;
+    }
+
+    try {
+        UsbForwarding::SessionInputs inputs;
+        inputs.platformSupported = true;
+        inputs.enabled = true;
+        inputs.autoDevices = m_Preferences->usbForwardingAutoDevices;
+        // NB: streamAddress and pairedAddress both come from m_Computer->activeAddress
+        // (streamAddress as it was when the connection started, pairedAddress as it is
+        // now). The equality check in planSession() therefore only guards against the
+        // address changing in between (it fails closed); it is not an independent check.
+        inputs.streamAddress = m_StreamHostAddress;
+
+        NvAddress address;
+        uint16_t httpsPort;
+        bool useTrueUid;
+        {
+            QReadLocker locker(&m_Computer->lock);
+            address = m_Computer->activeAddress;
+            httpsPort = m_Computer->activeHttpsPort;
+            useTrueUid = !m_Computer->isNvidiaServerSoftware;
+            inputs.pinnedServerCertificate = m_Computer->serverCert;
+        }
+        inputs.pairedAddress = address.address();
+        inputs.clientSsl = IdentityManager::get()->getSslConfig();
+
+        const UsbForwarding::SessionPlan plan = UsbForwarding::planSession(inputs);
+        if (plan.kind == UsbForwarding::PlanKind::Refused) {
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                        "USB forwarding not started: %s", plan.reason.toUtf8().constData());
+            return;
+        }
+        if (plan.kind != UsbForwarding::PlanKind::Start) {
+            return;
+        }
+
+        m_UsbForwardingRevision = 0;
+        m_UsbForwardingLastPoll = SDL_GetTicks();
+        m_UsbForwarding = new UsbForwarding::Manager(
+            UsbForwarding::makeSessionSeams(address, httpsPort, inputs.pinnedServerCertificate, useTrueUid));
+        if (!m_UsbForwarding->start(plan.config)) {
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "USB forwarding refused its configuration");
+            destroyUsbForwarding();
+        }
+    } catch (...) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "USB forwarding could not be started");
+        destroyUsbForwarding();
+    }
+#endif
+}
+
+void Session::destroyUsbForwarding() noexcept
+{
+    UsbForwarding::Manager* manager = m_UsbForwarding;
+    m_UsbForwarding = nullptr;
+    if (manager != nullptr) {
+        manager->stop();
+        delete manager;
+    }
+}
+
+// Called from the SDL loop when it wakes with nothing to do and after each handled
+// event, throttled to once a second, so there is no per-frame work and no Qt event
+// pump. It only logs a short fixed status line when the manager's state changed.
+void Session::pollUsbForwarding()
+{
+    if (m_UsbForwarding == nullptr) {
+        return;
+    }
+
+    try {
+        const Uint32 now = SDL_GetTicks();
+        if (now - m_UsbForwardingLastPoll < 1000) {
+            return;
+        }
+        m_UsbForwardingLastPoll = now;
+
+        const UsbForwarding::Snapshot snapshot = m_UsbForwarding->snapshot();
+        if (snapshot.revision != m_UsbForwardingRevision) {
+            m_UsbForwardingRevision = snapshot.revision;
+            SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                        "USB forwarding: %s", snapshot.status.toUtf8().constData());
+        }
+    } catch (...) {
+    }
+}
+
+void Session::toggleUsbForwarding()
+{
+    // With the feature off there is no manager, so the key combo does nothing.
+    if (m_UsbForwarding == nullptr) {
+        return;
+    }
+
+    try {
+        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                    "%s", m_UsbForwarding->toggle() ? "USB forwarding paused or resumed"
+                                                    : "USB forwarding: nothing to pause or resume");
+    } catch (...) {
+    }
 }
 
 void Session::exec()
@@ -2030,6 +2148,9 @@ void Session::exec()
     // (m_UnexpectedTermination is set back to true).
     m_UnexpectedTermination = false;
 
+    // Start USB forwarding. Does nothing unless the user turned it on in Settings.
+    startUsbForwarding();
+
     // Start rich presence to indicate we're in game
     RichPresenceManager presence(*m_Preferences, m_App.name);
 
@@ -2055,6 +2176,7 @@ void Session::exec()
         // and other problems.
         if (!SDL_WaitEventTimeout(&event, 1000)) {
             presence.runCallbacks();
+            pollUsbForwarding();
             continue;
         }
 #else
@@ -2071,6 +2193,7 @@ void Session::exec()
             SDL_Delay(10);
 #endif
             presence.runCallbacks();
+            pollUsbForwarding();
             continue;
         }
 #endif
@@ -2384,6 +2507,13 @@ void Session::exec()
             }
             break;
         }
+
+        // Also check after handling an event, so the status log cannot stall under
+        // continuous input. A null check when USB forwarding is off; otherwise one
+        // tick read and compare (the 1 second throttle is inside).
+        if (m_UsbForwarding != nullptr) {
+            pollUsbForwarding();
+        }
     }
 
 DispatchDeferredCleanup:
@@ -2452,6 +2582,12 @@ DispatchDeferredCleanup:
     }
 
     SDL_QuitSubSystem(SDL_INIT_VIDEO);
+
+    // Stop USB forwarding only now: the window is gone, input is released and the
+    // UI can continue, so even a slow stop cannot hold up the visible teardown.
+    // This label is the only exit from the stream loop, and it runs on this
+    // thread (the Manager's own thread), which keeps the QObject delete safe.
+    destroyUsbForwarding();
 
     // Cleanup can take a while, so dispatch it to a worker thread.
     // When it is complete, it will release our s_ActiveSessionSemaphore

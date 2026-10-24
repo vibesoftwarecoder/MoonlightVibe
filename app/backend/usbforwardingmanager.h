@@ -90,6 +90,10 @@ struct ManagerSeams
     DeviceLister listDevices;
     /* Optional: defaults to the real UsbForwarding::Tunnel. */
     TunnelFactory createTunnel;
+    /* Optional. Called by stop() before it joins the worker, from any thread:
+     * a lister that is waiting on something (a process) must give up and
+     * return soon. stop() never waits for a lister either way. */
+    std::function<void()> abandonListing;
 };
 
 struct ManagerOptions
@@ -218,6 +222,7 @@ private:
     struct Runtime;
     void publishLocal(State state);
     void teardownLocked();
+    void abandonListing() noexcept;
 
     ManagerSeams m_Seams;
     ManagerOptions m_Options;

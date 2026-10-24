@@ -14,6 +14,8 @@
 #include <QTimer>
 #include <QtTest>
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <mutex>
 #include <stdexcept>
 #include <thread>
@@ -1155,6 +1157,54 @@ private slots:
         QVERIFY2(!impostor.received().contains(kToken), "token reached a host that is not the pinned one");
         QCOMPARE(manager.snapshot().forwardingCount(), 0);
         manager.stop();
+    }
+
+    // A device check that is stuck (usbipd hanging) must never hold up stop(),
+    // and its answer, when it finally comes, must be dropped.
+    void slowDeviceListNeverDelaysStopAndLateAnswerIsDropped()
+    {
+        for (int round = 0; round < 100; ++round) {
+            auto env = std::make_shared<Env>();
+            std::mutex gateMutex;
+            std::condition_variable gate;
+            bool release = false;
+            std::atomic<bool> entered{false};
+            std::atomic<bool> finishedLate{false};
+            std::atomic<bool> abandoned{false};
+            ManagerSeams seams = fakeSeams(env);
+            seams.listDevices = [&] {
+                entered = true;
+                {
+                    std::unique_lock<std::mutex> lock(gateMutex);
+                    // "Blocks for several seconds" unless the test lets it go.
+                    gate.wait_for(lock, std::chrono::seconds(5), [&] { return release; });
+                }
+                finishedLate = true;
+                return QList<SharedDevice>{{QStringLiteral("054c:0ce6"), "1-1"}};
+            };
+            seams.abandonListing = [&] { abandoned = true; };
+            Manager manager(seams, fastOptions());
+            QVERIFY(manager.start(config()));
+            QVERIFY(waitUntil([&] { return entered.load(); }, 5000));
+
+            QElapsedTimer stopTimer;
+            stopTimer.start();
+            manager.stop();
+            const qint64 elapsed = stopTimer.elapsed();
+            QVERIFY2(elapsed < 200, qPrintable(QStringLiteral("stop() took %1 ms (round %2)").arg(elapsed).arg(round)));
+            QVERIFY(abandoned.load());
+            QVERIFY(!finishedLate.load());   // the lister really was still stuck when stop() returned
+
+            {
+                std::lock_guard<std::mutex> lock(gateMutex);
+                release = true;
+            }
+            gate.notify_all();
+            QVERIFY(waitUntil([&] { return finishedLate.load(); }, 2000));
+            QTest::qWait(10);                 // give a (wrongly) delivered answer time to arrive
+            QCOMPARE(env->startedCount(), 0); // dropped: no tunnel was started for it
+            QCOMPARE(manager.snapshot().state, State::Stopped);
+        }
     }
 };
 

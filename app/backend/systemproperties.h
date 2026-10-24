@@ -27,6 +27,7 @@ public:
     Q_PROPERTY(bool usesMaterial3Theme MEMBER usesMaterial3Theme CONSTANT)
     Q_PROPERTY(QString versionString MEMBER versionString CONSTANT)
     Q_PROPERTY(bool logFilesAvailable MEMBER logFilesAvailable CONSTANT)
+    Q_PROPERTY(bool usbForwardingAvailable MEMBER usbForwardingAvailable CONSTANT)
     Q_PROPERTY(bool diagnosticLoggingEnabled READ diagnosticLoggingEnabled NOTIFY diagnosticLoggingEnabledChanged)
 
     // Properties queried asynchronously (startAsyncLoad() must be called!)
@@ -75,6 +76,7 @@ private:
     bool usesMaterial3Theme;
     bool isDarwin;
     bool logFilesAvailable;
+    bool usbForwardingAvailable;
 
     // Properties only set if startAsyncLoad() is called
     bool hasHardwareAcceleration;

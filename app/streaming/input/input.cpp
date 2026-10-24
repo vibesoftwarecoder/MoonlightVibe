@@ -2,6 +2,7 @@
 #include "SDL_compat.h"
 #include "streaming/session.h"
 #include "settings/mappingmanager.h"
+#include "backend/usbforwardinguilogic.h"
 #include "path.h"
 #include "utils.h"
 
@@ -135,6 +136,20 @@ SdlInputHandler::SdlInputHandler(StreamingPreferences& prefs, int streamWidth, i
     m_SpecialKeyCombos[KeyComboToggleKeyboardGrab].keyCode = SDLK_k;
     m_SpecialKeyCombos[KeyComboToggleKeyboardGrab].scanCode = SDL_SCANCODE_K;
     m_SpecialKeyCombos[KeyComboToggleKeyboardGrab].enabled = WMUtils::isRunningDesktopEnvironment();
+
+    // Ctrl+Alt+Shift+U pauses or resumes USB forwarding. It is only active when the
+    // user turned USB forwarding on (Windows only); otherwise the keys pass through
+    // to the host exactly as before.
+    m_SpecialKeyCombos[KeyComboToggleUsbForwarding].keyCombo = KeyComboToggleUsbForwarding;
+    m_SpecialKeyCombos[KeyComboToggleUsbForwarding].keyCode = SDLK_u;
+    m_SpecialKeyCombos[KeyComboToggleUsbForwarding].scanCode = SDL_SCANCODE_U;
+#ifdef Q_OS_WIN
+    const bool isWindows = true;
+#else
+    const bool isWindows = false;
+#endif
+    m_SpecialKeyCombos[KeyComboToggleUsbForwarding].enabled =
+        UsbForwarding::Ui::usbForwardingHotkeyEnabled(isWindows, prefs.usbForwardingEnabled);
 
     m_OldIgnoreDevices = SDL_GetHint(SDL_HINT_GAMECONTROLLER_IGNORE_DEVICES);
     m_OldIgnoreDevicesExcept = SDL_GetHint(SDL_HINT_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT);

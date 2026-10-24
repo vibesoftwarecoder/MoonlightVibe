@@ -6,6 +6,8 @@
 
 #include <QObject>
 #include <QString>
+#include <QStringList>
+#include <QVariantMap>
 #include <QVariantList>
 #include <functional>
 #include <memory>
@@ -86,8 +88,18 @@ public:
     ~UsbForwardingBackend() override;
 
     Q_INVOKABLE void refresh();
+    // Kills and deletes a usbipd state probe that is still running. Called on
+    // application quit and by the destructor.
+    void shutdown();
     Q_INVOKABLE void bind(const QString &busId);
     Q_INVOKABLE void unbind(const QString &busId, const QString &persistedGuid);
+
+    // Helpers for the settings list (see usbforwardinguilogic.h).
+    Q_INVOKABLE QString shareStateText(const QVariantMap &device) const;
+    Q_INVOKABLE bool canShare(const QVariantMap &device) const;
+    Q_INVOKABLE bool canStopSharing(const QVariantMap &device) const;
+    Q_INVOKABLE bool autoDevicesContain(const QStringList &list, const QString &identity) const;
+    Q_INVOKABLE QStringList autoDevicesWith(const QStringList &list, const QString &identity, bool on) const;
 
     QVariantList devices() const { return m_Devices; }
     bool busy() const { return m_Busy; }

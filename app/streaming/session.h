@@ -13,6 +13,10 @@
 
 class MicrophoneCapture;
 
+namespace UsbForwarding {
+class Manager;
+}
+
 class SupportedVideoFormatList : public QList<int>
 {
 public:
@@ -167,6 +171,13 @@ private:
 
     void destroyMicrophoneCapture();
 
+    // USB forwarding (Windows only, off by default). All of these do nothing
+    // when the feature is off or unsupported, and none of them can throw.
+    void startUsbForwarding();
+    void destroyUsbForwarding() noexcept;
+    void pollUsbForwarding();
+    void toggleUsbForwarding();
+
     void getWindowDimensions(int& x, int& y,
                              int& width, int& height);
 
@@ -286,6 +297,12 @@ private:
     Uint32 m_DropAudioEndTime;
     MicrophoneCapture* m_MicrophoneCapture;
     bool m_MicrophoneEnabled;
+
+    UsbForwarding::Manager* m_UsbForwarding;
+    quint64 m_UsbForwardingRevision;
+    Uint32 m_UsbForwardingLastPoll;
+    // The host string the stream connected to (what LiStartConnection() got)
+    QString m_StreamHostAddress;
 
     Overlay::OverlayManager m_OverlayManager;
 
