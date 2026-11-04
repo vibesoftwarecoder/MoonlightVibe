@@ -170,6 +170,13 @@ bool SecondaryStreamWindow::recreateDecoder()
     return true;
 }
 
+void SecondaryStreamWindow::stopAndClose()
+{
+    // The window is gone for good, so there is no reason for the host to keep encoding what it showed
+    LiStopVideoStream(1);
+    close();
+}
+
 void SecondaryStreamWindow::handleWindowEvent(const SDL_WindowEvent& event)
 {
     if (m_Window == nullptr) {
@@ -179,12 +186,12 @@ void SecondaryStreamWindow::handleWindowEvent(const SDL_WindowEvent& event)
     switch (event.event) {
     case SDL_WINDOWEVENT_CLOSE:
         // The user closed the second window. The session carries on with the first.
-        close();
+        stopAndClose();
         break;
 
     case SDL_WINDOWEVENT_SHOWN:
         if (m_Decoder == nullptr && !recreateDecoder()) {
-            close();
+            stopAndClose();
         }
         break;
 
@@ -197,7 +204,7 @@ void SecondaryStreamWindow::handleWindowEvent(const SDL_WindowEvent& event)
             info.width = event.data1;
             info.height = event.data2;
             if (!m_Decoder->notifyWindowChanged(&info) && !recreateDecoder()) {
-                close();
+                stopAndClose();
             }
         }
         break;
@@ -205,7 +212,7 @@ void SecondaryStreamWindow::handleWindowEvent(const SDL_WindowEvent& event)
     case SDL_WINDOWEVENT_DISPLAY_CHANGED:
         // Another display can have another refresh rate, so start the renderer over.
         if (m_Decoder != nullptr && !recreateDecoder()) {
-            close();
+            stopAndClose();
         }
         break;
 

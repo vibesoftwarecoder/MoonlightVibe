@@ -44,6 +44,8 @@ public:
     void handleMouseButton(const SDL_MouseButtonEvent* event);
 
 private:
+    // Close the window and tell the host to stop sending the stream it showed
+    void stopAndClose();
     bool recreateDecoder();
     bool toVideoPosition(int windowX, int windowY, short& x, short& y, short& referenceWidth, short& referenceHeight);
 
