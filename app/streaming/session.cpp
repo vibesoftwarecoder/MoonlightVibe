@@ -1458,6 +1458,18 @@ void Session::getWindowDimensions(int& x, int& y,
         }
     }
 
+    // The user may have chosen the display for this window
+    if (m_Window == nullptr && m_Preferences->primaryWindowDisplay > 0) {
+        if (m_Preferences->primaryWindowDisplay <= SDL_GetNumVideoDisplays()) {
+            displayIndex = m_Preferences->primaryWindowDisplay - 1;
+        }
+        else {
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                        "Display %d was chosen for the stream window, but only %d display(s) are attached",
+                        m_Preferences->primaryWindowDisplay, SDL_GetNumVideoDisplays());
+        }
+    }
+
     // Get the usable display bounds
     SDL_Rect usableBounds;
     if (SDL_GetDisplayUsableBounds(displayIndex, &usableBounds) != 0) {

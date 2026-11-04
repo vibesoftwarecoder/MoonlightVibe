@@ -64,13 +64,39 @@ bool SecondaryStreamWindow::open()
     std::string title = (m_Session->m_Computer->name + " - " + m_Title).toStdString();
     Uint32 flags = SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE;
 
-    m_Window = SDL_CreateWindow(title.c_str(), SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width, height,
+    // Open on the chosen display. Automatic means a display the first window is not on, if there is one, so that
+    // the two windows do not land on top of each other.
+    int displayCount = SDL_GetNumVideoDisplays();
+    int mainDisplay = m_Session->m_Window != nullptr ? SDL_GetWindowDisplayIndex(m_Session->m_Window) : 0;
+    int display = -1;
+    int chosen = m_Session->m_Preferences->secondWindowDisplay;
+    if (chosen > 0 && chosen <= displayCount) {
+        display = chosen - 1;
+    }
+    else if (chosen > displayCount) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "Display %d was chosen for the second window, but only %d display(s) are attached",
+                    chosen, displayCount);
+    }
+    else if (displayCount > 1) {
+        for (int i = 0; i < displayCount; i++) {
+            if (i != mainDisplay) {
+                display = i;
+                break;
+            }
+        }
+    }
+    int position = display >= 0 ? SDL_WINDOWPOS_CENTERED_DISPLAY(display) : SDL_WINDOWPOS_UNDEFINED;
+    SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Second window goes on display %d of %d (first window is on %d)",
+                display >= 0 ? display + 1 : 0, displayCount, mainDisplay + 1);
+
+    m_Window = SDL_CreateWindow(title.c_str(), position, position, width, height,
                                 flags | StreamUtils::getPlatformWindowFlags());
     if (m_Window == nullptr) {
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
                     "SDL_CreateWindow() for the second window failed with platform flags: %s",
                     SDL_GetError());
-        m_Window = SDL_CreateWindow(title.c_str(), SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width, height, flags);
+        m_Window = SDL_CreateWindow(title.c_str(), position, position, width, height, flags);
     }
     if (m_Window == nullptr) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,

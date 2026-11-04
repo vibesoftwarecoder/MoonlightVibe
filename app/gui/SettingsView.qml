@@ -817,6 +817,156 @@ Flickable {
                     ToolTip.text: qsTr("Fullscreen generally provides the best performance, but borderless windowed may work better with features like macOS Spaces, Alt+Tab, screenshot tools, on-screen overlays, etc.")
                 }
 
+                Label {
+                    width: parent.width
+                    id: primaryWindowDisplayTitle
+                    text: qsTr("Stream window display")
+                    font.pointSize: 12
+                    wrapMode: Text.Wrap
+                    visible: SystemProperties.hasDesktopEnvironment
+                }
+
+                AutoResizingComboBox {
+                    function createModel() {
+                        var model = Qt.createQmlObject('import QtQuick 2.0; ListModel {}', parent, '')
+
+                        model.append({
+                                         text: qsTr("Automatic"),
+                                         val: 0
+                                     })
+
+                        // Refresh display data before using it to build the list
+                        SystemProperties.refreshDisplays()
+                        for (var displayIndex = 0; ; displayIndex++) {
+                            var rect = SystemProperties.getNativeResolution(displayIndex)
+                            if (rect.width <= 0 || rect.height <= 0) {
+                                break
+                            }
+
+                            model.append({
+                                             text: qsTr("Display %1").arg(displayIndex + 1) + " (" + rect.width + "x" + rect.height + ")",
+                                             val: displayIndex + 1
+                                         })
+                        }
+
+                        return model
+                    }
+
+                    // This is used on initialization and upon retranslation
+                    function reinitialize() {
+                        if (!visible) {
+                            return
+                        }
+
+                        model = createModel()
+                        currentIndex = 0
+
+                        // Set the current value based on the saved preferences
+                        var saved = StreamingPreferences.primaryWindowDisplay
+                        for (var i = 0; i < model.count; i++) {
+                            if (saved === model.get(i).val) {
+                                currentIndex = i
+                                break
+                            }
+                        }
+
+                        activated(currentIndex)
+                    }
+
+                    Component.onCompleted: {
+                        reinitialize()
+                        languageChanged.connect(reinitialize)
+                    }
+
+                    id: primaryWindowDisplayComboBox
+                    visible: SystemProperties.hasDesktopEnvironment
+                    hoverEnabled: true
+                    textRole: "text"
+                    onActivated: {
+                        StreamingPreferences.primaryWindowDisplay = model.get(currentIndex).val
+                    }
+
+                    ToolTip.delay: 1000
+                    ToolTip.timeout: 5000
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Which display the stream window opens on. Automatic uses the display this app is on.")
+                }
+
+                Label {
+                    width: parent.width
+                    id: secondWindowDisplayTitle
+                    text: qsTr("Second window display")
+                    font.pointSize: 12
+                    wrapMode: Text.Wrap
+                    visible: SystemProperties.hasDesktopEnvironment
+                }
+
+                AutoResizingComboBox {
+                    function createModel() {
+                        var model = Qt.createQmlObject('import QtQuick 2.0; ListModel {}', parent, '')
+
+                        model.append({
+                                         text: qsTr("Automatic"),
+                                         val: 0
+                                     })
+
+                        // Refresh display data before using it to build the list
+                        SystemProperties.refreshDisplays()
+                        for (var displayIndex = 0; ; displayIndex++) {
+                            var rect = SystemProperties.getNativeResolution(displayIndex)
+                            if (rect.width <= 0 || rect.height <= 0) {
+                                break
+                            }
+
+                            model.append({
+                                             text: qsTr("Display %1").arg(displayIndex + 1) + " (" + rect.width + "x" + rect.height + ")",
+                                             val: displayIndex + 1
+                                         })
+                        }
+
+                        return model
+                    }
+
+                    // This is used on initialization and upon retranslation
+                    function reinitialize() {
+                        if (!visible) {
+                            return
+                        }
+
+                        model = createModel()
+                        currentIndex = 0
+
+                        // Set the current value based on the saved preferences
+                        var saved = StreamingPreferences.secondWindowDisplay
+                        for (var i = 0; i < model.count; i++) {
+                            if (saved === model.get(i).val) {
+                                currentIndex = i
+                                break
+                            }
+                        }
+
+                        activated(currentIndex)
+                    }
+
+                    Component.onCompleted: {
+                        reinitialize()
+                        languageChanged.connect(reinitialize)
+                    }
+
+                    id: secondWindowDisplayComboBox
+                    visible: SystemProperties.hasDesktopEnvironment
+                    hoverEnabled: true
+                    textRole: "text"
+                    onActivated: {
+                        StreamingPreferences.secondWindowDisplay = model.get(currentIndex).val
+                    }
+
+                    ToolTip.delay: 1000
+                    ToolTip.timeout: 5000
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Which display the second window opens on, when a second window is used. Automatic picks a display the stream window is not on.")
+                }
+
                 Row {
                     spacing: 5
                     width: parent.width

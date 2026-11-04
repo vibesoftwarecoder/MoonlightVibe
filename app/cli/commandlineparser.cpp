@@ -356,6 +356,8 @@ void StreamCommandLineParser::parse(const QStringList &args, StreamingPreference
     parser.addToggleOption("quit-after", "quit app after session");
     parser.addToggleOption("absolute-mouse", "remote desktop optimized mouse control");
     parser.addValueOption("second-window", "title of a host window to show in a second client window");
+    parser.addValueOption("window-display", "display number (1, 2, ...) for the stream window, 0 = automatic");
+    parser.addValueOption("second-window-display", "display number (1, 2, ...) for the second window, 0 = automatic");
     parser.addToggleOption("mouse-buttons-swap", "left and right mouse buttons swap");
     parser.addToggleOption("touchscreen-trackpad", "touchscreen in trackpad mode");
     parser.addToggleOption("game-optimization", "game optimizations");
@@ -453,6 +455,14 @@ void StreamCommandLineParser::parse(const QStringList &args, StreamingPreference
     // Resolve --second-window option
     if (parser.isSet("second-window")) {
         preferences->secondWindowTitle = parser.value("second-window");
+    }
+
+    // Resolve --window-display and --second-window-display options
+    if (parser.isSet("window-display")) {
+        preferences->primaryWindowDisplay = qMax(0, parser.getIntOption("window-display"));
+    }
+    if (parser.isSet("second-window-display")) {
+        preferences->secondWindowDisplay = qMax(0, parser.getIntOption("second-window-display"));
     }
 
     // Resolve --absolute-mouse and --no-absolute-mouse options

@@ -177,6 +177,8 @@ public:
     Q_PROPERTY(WindowMode windowMode MEMBER windowMode NOTIFY windowModeChanged)
     Q_PROPERTY(WindowMode recommendedFullScreenMode MEMBER recommendedFullScreenMode CONSTANT)
     Q_PROPERTY(UIDisplayMode uiDisplayMode MEMBER uiDisplayMode NOTIFY uiDisplayModeChanged)
+    Q_PROPERTY(int primaryWindowDisplay MEMBER primaryWindowDisplay NOTIFY primaryWindowDisplayChanged)
+    Q_PROPERTY(int secondWindowDisplay MEMBER secondWindowDisplay NOTIFY secondWindowDisplayChanged)
     Q_PROPERTY(bool swapMouseButtons MEMBER swapMouseButtons NOTIFY mouseButtonsChanged)
     Q_PROPERTY(bool muteOnFocusLoss MEMBER muteOnFocusLoss NOTIFY muteOnFocusLossChanged)
     Q_PROPERTY(bool usbForwardingEnabled MEMBER usbForwardingEnabled NOTIFY usbForwardingEnabledChanged)
@@ -246,6 +248,10 @@ public:
     WindowMode windowMode;
     WindowMode recommendedFullScreenMode;
     UIDisplayMode uiDisplayMode;
+
+    // Which display each stream window opens on: 0 picks one automatically, 1 is the first display, 2 the second
+    int primaryWindowDisplay;
+    int secondWindowDisplay;
     Language language;
     CaptureSysKeysMode captureSysKeysMode;
     GamepadQuitCombo gamepadQuitCombo;
@@ -271,6 +277,8 @@ signals:
     void enableYUV444Changed();
     void videoDecoderSelectionChanged();
     void uiDisplayModeChanged();
+    void primaryWindowDisplayChanged();
+    void secondWindowDisplayChanged();
     void windowModeChanged();
     void framePacingChanged();
     void connectionWarningsChanged();
