@@ -967,6 +967,120 @@ Flickable {
                     ToolTip.text: qsTr("Which display the second window opens on, when a second window is used. Automatic picks a display the stream window is not on.")
                 }
 
+                Label {
+                    width: parent.width
+                    id: secondWindowResolutionTitle
+                    text: qsTr("Second window resolution")
+                    font.pointSize: 12
+                    wrapMode: Text.Wrap
+                    visible: SystemProperties.hasDesktopEnvironment
+                }
+
+                AutoResizingComboBox {
+                    function createModel() {
+                        var model = Qt.createQmlObject('import QtQuick 2.0; ListModel {}', parent, '')
+
+                        model.append({ text: "1280x720", w: 1280, h: 720 })
+                        model.append({ text: "1920x1080", w: 1920, h: 1080 })
+                        model.append({ text: "2560x1440", w: 2560, h: 1440 })
+                        model.append({ text: "3840x2160", w: 3840, h: 2160 })
+
+                        return model
+                    }
+
+                    function reinitialize() {
+                        if (!visible) {
+                            return
+                        }
+
+                        model = createModel()
+                        currentIndex = 1
+
+                        for (var i = 0; i < model.count; i++) {
+                            if (StreamingPreferences.secondWindowWidth === model.get(i).w &&
+                                    StreamingPreferences.secondWindowHeight === model.get(i).h) {
+                                currentIndex = i
+                                break
+                            }
+                        }
+
+                        activated(currentIndex)
+                    }
+
+                    Component.onCompleted: {
+                        reinitialize()
+                    }
+
+                    id: secondWindowResolutionComboBox
+                    visible: SystemProperties.hasDesktopEnvironment
+                    hoverEnabled: true
+                    textRole: "text"
+                    onActivated: {
+                        StreamingPreferences.secondWindowWidth = model.get(currentIndex).w
+                        StreamingPreferences.secondWindowHeight = model.get(currentIndex).h
+                    }
+
+                    ToolTip.delay: 1000
+                    ToolTip.timeout: 5000
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("The size of the video of the second window. A larger size is sharper when the window is large or fullscreen, and uses more bandwidth.")
+                }
+
+                Label {
+                    width: parent.width
+                    id: secondWindowFpsTitle
+                    text: qsTr("Second window frame rate")
+                    font.pointSize: 12
+                    wrapMode: Text.Wrap
+                    visible: SystemProperties.hasDesktopEnvironment
+                }
+
+                AutoResizingComboBox {
+                    function createModel() {
+                        var model = Qt.createQmlObject('import QtQuick 2.0; ListModel {}', parent, '')
+
+                        model.append({ text: "30 FPS", val: 30 })
+                        model.append({ text: "60 FPS", val: 60 })
+
+                        return model
+                    }
+
+                    function reinitialize() {
+                        if (!visible) {
+                            return
+                        }
+
+                        model = createModel()
+                        currentIndex = 1
+
+                        for (var i = 0; i < model.count; i++) {
+                            if (StreamingPreferences.secondWindowFps === model.get(i).val) {
+                                currentIndex = i
+                                break
+                            }
+                        }
+
+                        activated(currentIndex)
+                    }
+
+                    Component.onCompleted: {
+                        reinitialize()
+                    }
+
+                    id: secondWindowFpsComboBox
+                    visible: SystemProperties.hasDesktopEnvironment
+                    hoverEnabled: true
+                    textRole: "text"
+                    onActivated: {
+                        StreamingPreferences.secondWindowFps = model.get(currentIndex).val
+                    }
+
+                    ToolTip.delay: 1000
+                    ToolTip.timeout: 5000
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("The frame rate of the video of the second window. 30 is enough for most windows and uses less bandwidth.")
+                }
+
                 Row {
                     spacing: 5
                     width: parent.width

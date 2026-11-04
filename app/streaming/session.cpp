@@ -764,7 +764,10 @@ bool Session::initialize(QQuickWindow* qtWindow)
                     "Second window request: title [%s] (command line), host uuid [%s]",
                     m_Preferences->secondWindowTitle.toUtf8().constData(),
                     m_Computer->uuid.toUtf8().constData());
-        int secondWidth = 1280, secondHeight = 720, secondFps = 60, secondBitrate = 8000;
+        int secondWidth = m_Preferences->secondWindowWidth;
+        int secondHeight = m_Preferences->secondWindowHeight;
+        int secondFps = m_Preferences->secondWindowFps;
+        int secondBitrate = StreamingPreferences::getDefaultBitrate(secondWidth, secondHeight, secondFps, false);
 
         if (!m_Computer->uuid.isEmpty()) {
             QSettings seatSettings;
@@ -775,6 +778,10 @@ bool Session::initialize(QQuickWindow* qtWindow)
             secondWidth = seatSettings.value("secondWindowWidth", secondWidth).toInt();
             secondHeight = seatSettings.value("secondWindowHeight", secondHeight).toInt();
             secondFps = seatSettings.value("secondWindowFps", secondFps).toInt();
+            // A size or rate set for this seat changes the bitrate that fits, unless the seat sets one itself
+            if (!seatSettings.contains("secondWindowBitrate")) {
+                secondBitrate = StreamingPreferences::getDefaultBitrate(secondWidth, secondHeight, secondFps, false);
+            }
             secondBitrate = seatSettings.value("secondWindowBitrate", secondBitrate).toInt();
             seatSettings.endGroup();
         }

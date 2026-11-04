@@ -41,6 +41,9 @@
 #define SER_UIDISPLAYMODE "uidisplaymode"
 #define SER_PRIMARYWINDOWDISPLAY "primarywindowdisplay"
 #define SER_SECONDWINDOWDISPLAY "secondwindowdisplay"
+#define SER_SECONDWINDOWWIDTH "secondwindowwidth"
+#define SER_SECONDWINDOWHEIGHT "secondwindowheight"
+#define SER_SECONDWINDOWFPS "secondwindowfps"
 #define SER_RICHPRESENCE "richpresence"
 #define SER_GAMEPADMOUSE "gamepadmouse"
 #define SER_DEFAULTVER "defaultver"
@@ -200,6 +203,9 @@ void StreamingPreferences::reload()
                                                                                                                  : UIDisplayMode::UI_MAXIMIZED)).toInt());
     primaryWindowDisplay = settings.value(SER_PRIMARYWINDOWDISPLAY, 0).toInt();
     secondWindowDisplay = settings.value(SER_SECONDWINDOWDISPLAY, 0).toInt();
+    secondWindowWidth = settings.value(SER_SECONDWINDOWWIDTH, 1920).toInt();
+    secondWindowHeight = settings.value(SER_SECONDWINDOWHEIGHT, 1080).toInt();
+    secondWindowFps = settings.value(SER_SECONDWINDOWFPS, 60).toInt();
     language = static_cast<Language>(settings.value(SER_LANGUAGE,
                                                     static_cast<int>(Language::LANG_AUTO)).toInt());
 
@@ -390,6 +396,9 @@ void StreamingPreferences::save()
     settings.setValue(SER_UIDISPLAYMODE, static_cast<int>(uiDisplayMode));
     settings.setValue(SER_PRIMARYWINDOWDISPLAY, primaryWindowDisplay);
     settings.setValue(SER_SECONDWINDOWDISPLAY, secondWindowDisplay);
+    settings.setValue(SER_SECONDWINDOWWIDTH, secondWindowWidth);
+    settings.setValue(SER_SECONDWINDOWHEIGHT, secondWindowHeight);
+    settings.setValue(SER_SECONDWINDOWFPS, secondWindowFps);
     settings.setValue(SER_LANGUAGE, static_cast<int>(language));
     settings.setValue(SER_DEFAULTVER, CURRENT_DEFAULT_VER);
     settings.setValue(SER_SWAPMOUSEBUTTONS, swapMouseButtons);

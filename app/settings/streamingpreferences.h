@@ -179,6 +179,9 @@ public:
     Q_PROPERTY(UIDisplayMode uiDisplayMode MEMBER uiDisplayMode NOTIFY uiDisplayModeChanged)
     Q_PROPERTY(int primaryWindowDisplay MEMBER primaryWindowDisplay NOTIFY primaryWindowDisplayChanged)
     Q_PROPERTY(int secondWindowDisplay MEMBER secondWindowDisplay NOTIFY secondWindowDisplayChanged)
+    Q_PROPERTY(int secondWindowWidth MEMBER secondWindowWidth NOTIFY secondWindowVideoChanged)
+    Q_PROPERTY(int secondWindowHeight MEMBER secondWindowHeight NOTIFY secondWindowVideoChanged)
+    Q_PROPERTY(int secondWindowFps MEMBER secondWindowFps NOTIFY secondWindowVideoChanged)
     Q_PROPERTY(bool swapMouseButtons MEMBER swapMouseButtons NOTIFY mouseButtonsChanged)
     Q_PROPERTY(bool muteOnFocusLoss MEMBER muteOnFocusLoss NOTIFY muteOnFocusLossChanged)
     Q_PROPERTY(bool usbForwardingEnabled MEMBER usbForwardingEnabled NOTIFY usbForwardingEnabledChanged)
@@ -252,6 +255,11 @@ public:
     // Which display each stream window opens on: 0 picks one automatically, 1 is the first display, 2 the second
     int primaryWindowDisplay;
     int secondWindowDisplay;
+
+    // The video stream of the second window: its size and frame rate (its bitrate follows from them)
+    int secondWindowWidth;
+    int secondWindowHeight;
+    int secondWindowFps;
     Language language;
     CaptureSysKeysMode captureSysKeysMode;
     GamepadQuitCombo gamepadQuitCombo;
@@ -279,6 +287,7 @@ signals:
     void uiDisplayModeChanged();
     void primaryWindowDisplayChanged();
     void secondWindowDisplayChanged();
+    void secondWindowVideoChanged();
     void windowModeChanged();
     void framePacingChanged();
     void connectionWarningsChanged();

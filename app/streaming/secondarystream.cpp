@@ -57,9 +57,9 @@ bool SecondaryStreamWindow::open()
         return true;
     }
 
-    // Start at the stream's shape, at most 960 pixels wide. The user can resize it.
-    int width = std::min(m_VideoWidth > 0 ? m_VideoWidth : 960, 960);
-    int height = m_VideoWidth > 0 ? width * m_VideoHeight / m_VideoWidth : 540;
+    // Start at the stream's own size, shrunk to fit inside the display it opens on. The user can resize it.
+    int width = m_VideoWidth > 0 ? m_VideoWidth : 960;
+    int height = m_VideoWidth > 0 ? m_VideoHeight : 540;
 
     std::string title = (m_Session->m_Computer->name + " - " + m_Title).toStdString();
     Uint32 flags = SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE;
@@ -87,6 +87,23 @@ bool SecondaryStreamWindow::open()
         }
     }
     int position = display >= 0 ? SDL_WINDOWPOS_CENTERED_DISPLAY(display) : SDL_WINDOWPOS_UNDEFINED;
+
+    SDL_Rect usable;
+    if (SDL_GetDisplayUsableBounds(display >= 0 ? display : mainDisplay, &usable) == 0 && usable.w > 0 && usable.h > 0) {
+        int maxWidth = usable.w * 85 / 100;
+        int maxHeight = usable.h * 85 / 100;
+        if (width > maxWidth || height > maxHeight) {
+            // Keep the stream's shape
+            if ((long long)width * maxHeight > (long long)height * maxWidth) {
+                height = height * maxWidth / width;
+                width = maxWidth;
+            }
+            else {
+                width = width * maxHeight / height;
+                height = maxHeight;
+            }
+        }
+    }
     SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Second window goes on display %d of %d (first window is on %d)",
                 display >= 0 ? display + 1 : 0, displayCount, mainDisplay + 1);
 

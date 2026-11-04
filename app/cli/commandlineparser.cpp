@@ -357,6 +357,8 @@ void StreamCommandLineParser::parse(const QStringList &args, StreamingPreference
     parser.addToggleOption("absolute-mouse", "remote desktop optimized mouse control");
     parser.addValueOption("second-window", "title of a host window to show in a second client window");
     parser.addValueOption("window-display", "display number (1, 2, ...) for the stream window, 0 = automatic");
+    parser.addValueOption("second-window-resolution", "custom <width>x<height> resolution of the second window's video");
+    parser.addValueOption("second-window-fps", "frame rate of the second window's video");
     parser.addValueOption("second-window-display", "display number (1, 2, ...) for the second window, 0 = automatic");
     parser.addToggleOption("mouse-buttons-swap", "left and right mouse buttons swap");
     parser.addToggleOption("touchscreen-trackpad", "touchscreen in trackpad mode");
@@ -455,6 +457,16 @@ void StreamCommandLineParser::parse(const QStringList &args, StreamingPreference
     // Resolve --second-window option
     if (parser.isSet("second-window")) {
         preferences->secondWindowTitle = parser.value("second-window");
+    }
+
+    // Resolve --second-window-resolution and --second-window-fps options
+    if (parser.isSet("second-window-resolution")) {
+        auto resolution = parser.getResolutionOptionValue("second-window-resolution");
+        preferences->secondWindowWidth = resolution.first;
+        preferences->secondWindowHeight = resolution.second;
+    }
+    if (parser.isSet("second-window-fps")) {
+        preferences->secondWindowFps = parser.getIntOption("second-window-fps");
     }
 
     // Resolve --window-display and --second-window-display options
