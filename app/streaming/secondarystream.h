@@ -60,4 +60,10 @@ private:
     int m_VideoWidth;
     int m_VideoHeight;
     int m_FrameRate;
+
+    // Guarded by m_DecoderLock. A new decoder gets nothing until a keyframe arrives, because a decoder that starts
+    // on a predicted frame has no references and FFmpeg can crash on the errors that follow.
+    bool m_NeedIdr;
+    Uint32 m_LastIdrRequestMs;
+    int m_LoggedFrames;
 };

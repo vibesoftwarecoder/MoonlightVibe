@@ -16,7 +16,10 @@ SecondaryStreamWindow::SecondaryStreamWindow(Session* session, const QString& ti
       m_VideoFormat(0),
       m_VideoWidth(0),
       m_VideoHeight(0),
-      m_FrameRate(0)
+      m_FrameRate(0),
+      m_NeedIdr(true),
+      m_LastIdrRequestMs(0),
+      m_LoggedFrames(0)
 {
 }
 
@@ -57,7 +60,32 @@ int SecondaryStreamWindow::drSubmitDecodeUnit(PDECODE_UNIT du)
     // is going away; drop the frame, and the new decoder asks for a keyframe when it is ready.
     if (SDL_TryLockMutex(self->m_DecoderLock) == 0) {
         int ret = DR_OK;
+
+        // The first frames show what the host really sends for this stream
+        if (self->m_LoggedFrames < 40) {
+            self->m_LoggedFrames++;
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                        "Second stream frame %d: number %d, type %d, %d bytes, decoder %s, waiting for keyframe %s",
+                        self->m_LoggedFrames, du->frameNumber, du->frameType, du->fullLength,
+                        self->m_Decoder != nullptr ? "ready" : "not ready",
+                        self->m_NeedIdr ? "yes" : "no");
+        }
+
         if (self->m_Decoder != nullptr) {
+            if (self->m_NeedIdr) {
+                if (du->frameType != FRAME_TYPE_IDR) {
+                    // Drop it, and ask again for a keyframe at most twice a second
+                    Uint32 now = SDL_GetTicks();
+                    if (now - self->m_LastIdrRequestMs > 500) {
+                        self->m_LastIdrRequestMs = now;
+                        ret = DR_NEED_IDR;
+                    }
+                    SDL_UnlockMutex(self->m_DecoderLock);
+                    return ret;
+                }
+                self->m_NeedIdr = false;
+                SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Second stream: keyframe %d arrived", du->frameNumber);
+            }
             ret = self->m_Decoder->submitDecodeUnit(du);
         }
         SDL_UnlockMutex(self->m_DecoderLock);
@@ -130,6 +158,8 @@ bool SecondaryStreamWindow::recreateDecoder()
     SDL_LockMutex(m_DecoderLock);
     delete m_Decoder;
     m_Decoder = nullptr;
+    m_NeedIdr = true;
+    m_LastIdrRequestMs = SDL_GetTicks();
 
     bool ok = Session::chooseDecoder(prefs->videoDecoderSelection,
                                      prefs->rendererSelection,
