@@ -1814,14 +1814,12 @@ bool Session::startConnectionAsync()
     }
 
     if (m_SecondWindow != nullptr) {
-        // The second stream is always delivered by push, whatever the first one does: the connection calls this
-        // callback from a decoder thread of its own, and the decoder's submitDecodeUnit() is the same call that the
-        // pull loop of the first window makes.
+        // The second window's decoder pulls its own stream, exactly as the first window's does with its stream, so it
+        // has the same capabilities and no submit callback.
         LiInitializeVideoCallbacks(&m_VideoCallbacks2);
         m_VideoCallbacks2.setup = SecondaryStreamWindow::drSetup;
         m_VideoCallbacks2.cleanup = SecondaryStreamWindow::drCleanup;
-        m_VideoCallbacks2.submitDecodeUnit = SecondaryStreamWindow::drSubmitDecodeUnit;
-        m_VideoCallbacks2.capabilities = m_VideoCallbacks.capabilities & ~CAPABILITY_PULL_RENDERER;
+        m_VideoCallbacks2.capabilities = m_VideoCallbacks.capabilities;
         LiSetSecondVideoStreamCallbacks(&m_VideoCallbacks2, nullptr, 0);
     }
 

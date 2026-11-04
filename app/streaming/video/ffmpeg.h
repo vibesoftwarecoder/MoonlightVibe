@@ -132,6 +132,7 @@ private:
     TestMode m_CurrentTestMode;
     SDL_Thread* m_DecoderThread;
     SDL_atomic_t m_DecoderThreadShouldQuit;
+    int m_StreamIndex; // which video stream this decoder pulls: 0 = first window, 1 = second window
 
     // Data buffers in the queued DU are not valid
     QQueue<DECODE_UNIT> m_FrameInfoQueue;

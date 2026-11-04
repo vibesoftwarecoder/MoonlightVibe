@@ -7,6 +7,8 @@
 
 #include <algorithm>
 
+thread_local int g_DecoderStreamIndex = 0;
+
 SecondaryStreamWindow::SecondaryStreamWindow(Session* session, const QString& title)
     : m_Session(session),
       m_Title(title),
@@ -16,10 +18,7 @@ SecondaryStreamWindow::SecondaryStreamWindow(Session* session, const QString& ti
       m_VideoFormat(0),
       m_VideoWidth(0),
       m_VideoHeight(0),
-      m_FrameRate(0),
-      m_NeedIdr(true),
-      m_LastIdrRequestMs(0),
-      m_LoggedFrames(0)
+      m_FrameRate(0)
 {
 }
 
@@ -52,49 +51,6 @@ void SecondaryStreamWindow::drCleanup()
     // The decoder and the window belong to the main thread and are destroyed there.
 }
 
-int SecondaryStreamWindow::drSubmitDecodeUnit(PDECODE_UNIT du)
-{
-    SecondaryStreamWindow* self = Session::get()->m_SecondWindow;
-
-    // The main thread takes this lock while it replaces or destroys the decoder. If we cannot get it, the decoder
-    // is going away; drop the frame, and the new decoder asks for a keyframe when it is ready.
-    if (SDL_TryLockMutex(self->m_DecoderLock) == 0) {
-        int ret = DR_OK;
-
-        // The first frames show what the host really sends for this stream
-        if (self->m_LoggedFrames < 40) {
-            self->m_LoggedFrames++;
-            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-                        "Second stream frame %d: number %d, type %d, %d bytes, decoder %s, waiting for keyframe %s",
-                        self->m_LoggedFrames, du->frameNumber, du->frameType, du->fullLength,
-                        self->m_Decoder != nullptr ? "ready" : "not ready",
-                        self->m_NeedIdr ? "yes" : "no");
-        }
-
-        if (self->m_Decoder != nullptr) {
-            if (self->m_NeedIdr) {
-                if (du->frameType != FRAME_TYPE_IDR) {
-                    // Drop it, and ask again for a keyframe at most twice a second
-                    Uint32 now = SDL_GetTicks();
-                    if (now - self->m_LastIdrRequestMs > 500) {
-                        self->m_LastIdrRequestMs = now;
-                        ret = DR_NEED_IDR;
-                    }
-                    SDL_UnlockMutex(self->m_DecoderLock);
-                    return ret;
-                }
-                self->m_NeedIdr = false;
-                SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Second stream: keyframe %d arrived", du->frameNumber);
-            }
-            ret = self->m_Decoder->submitDecodeUnit(du);
-        }
-        SDL_UnlockMutex(self->m_DecoderLock);
-        return ret;
-    }
-
-    return DR_OK;
-}
-
 bool SecondaryStreamWindow::open()
 {
     if (m_Window != nullptr) {
@@ -122,6 +78,12 @@ bool SecondaryStreamWindow::open()
                      SDL_GetError());
         return false;
     }
+
+    int actualWidth, actualHeight;
+    SDL_GetWindowSize(m_Window, &actualWidth, &actualHeight);
+    SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                "Second window opened: asked for %dx%d, got %dx%d (stream %dx%d)",
+                width, height, actualWidth, actualHeight, m_VideoWidth, m_VideoHeight);
 
     return true;
 }
@@ -158,9 +120,9 @@ bool SecondaryStreamWindow::recreateDecoder()
     SDL_LockMutex(m_DecoderLock);
     delete m_Decoder;
     m_Decoder = nullptr;
-    m_NeedIdr = true;
-    m_LastIdrRequestMs = SDL_GetTicks();
 
+    // The decoder pulls the frames of the stream it is made for, so tell it before it is created
+    g_DecoderStreamIndex = 1;
     bool ok = Session::chooseDecoder(prefs->videoDecoderSelection,
                                      prefs->rendererSelection,
                                      m_Window, m_VideoFormat, m_VideoWidth, m_VideoHeight, m_FrameRate,
@@ -168,6 +130,7 @@ bool SecondaryStreamWindow::recreateDecoder()
                                      enableVsync && prefs->framePacing,
                                      false,
                                      m_Decoder);
+    g_DecoderStreamIndex = 0;
     SDL_UnlockMutex(m_DecoderLock);
 
     if (!ok) {
@@ -200,6 +163,7 @@ void SecondaryStreamWindow::handleWindowEvent(const SDL_WindowEvent& event)
         break;
 
     case SDL_WINDOWEVENT_SIZE_CHANGED:
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Second window size changed to %dx%d", event.data1, event.data2);
         if (m_Decoder != nullptr && !(SDL_GetWindowFlags(m_Window) & SDL_WINDOW_MINIMIZED)) {
             WINDOW_STATE_CHANGE_INFO info = {};
             info.window = m_Window;

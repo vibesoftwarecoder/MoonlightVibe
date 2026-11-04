@@ -24,11 +24,10 @@ public:
     SecondaryStreamWindow(Session* session, const QString& title);
     ~SecondaryStreamWindow();
 
-    // Decoder and renderer callbacks for the connection, for the second stream. These run on the connection's
-    // threads, so they only touch the decoder under its lock.
+    // Decoder and renderer callbacks for the connection, for the second stream. The decoder pulls its frames itself,
+    // the way the first window's does, so there is no submit callback.
     static int drSetup(int videoFormat, int width, int height, int frameRate, void* context, int drFlags);
     static void drCleanup();
-    static int drSubmitDecodeUnit(PDECODE_UNIT du);
 
     // Main thread: show the window. The decoder is created when the window reports that it was shown.
     bool open();
@@ -60,10 +59,4 @@ private:
     int m_VideoWidth;
     int m_VideoHeight;
     int m_FrameRate;
-
-    // Guarded by m_DecoderLock. A new decoder gets nothing until a keyframe arrives, because a decoder that starts
-    // on a predicted frame has no references and FFmpeg can crash on the errors that follow.
-    bool m_NeedIdr;
-    Uint32 m_LastIdrRequestMs;
-    int m_LoggedFrames;
 };
