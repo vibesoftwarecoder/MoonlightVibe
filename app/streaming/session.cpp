@@ -1814,20 +1814,15 @@ bool Session::startConnectionAsync()
     }
 
     if (m_SecondWindow != nullptr) {
-        if (m_VideoCallbacks.capabilities & CAPABILITY_PULL_RENDERER) {
-            // The second window decodes the way the first one does not on pull-based platforms
-            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-                        "The second window is not supported with a pull-based renderer");
-            m_StreamConfig.enableSecondVideoStream = false;
-        }
-        else {
-            LiInitializeVideoCallbacks(&m_VideoCallbacks2);
-            m_VideoCallbacks2.setup = SecondaryStreamWindow::drSetup;
-            m_VideoCallbacks2.cleanup = SecondaryStreamWindow::drCleanup;
-            m_VideoCallbacks2.submitDecodeUnit = SecondaryStreamWindow::drSubmitDecodeUnit;
-            m_VideoCallbacks2.capabilities = m_VideoCallbacks.capabilities;
-            LiSetSecondVideoStreamCallbacks(&m_VideoCallbacks2, nullptr, 0);
-        }
+        // The second stream is always delivered by push, whatever the first one does: the connection calls this
+        // callback from a decoder thread of its own, and the decoder's submitDecodeUnit() is the same call that the
+        // pull loop of the first window makes.
+        LiInitializeVideoCallbacks(&m_VideoCallbacks2);
+        m_VideoCallbacks2.setup = SecondaryStreamWindow::drSetup;
+        m_VideoCallbacks2.cleanup = SecondaryStreamWindow::drCleanup;
+        m_VideoCallbacks2.submitDecodeUnit = SecondaryStreamWindow::drSubmitDecodeUnit;
+        m_VideoCallbacks2.capabilities = m_VideoCallbacks.capabilities & ~CAPABILITY_PULL_RENDERER;
+        LiSetSecondVideoStreamCallbacks(&m_VideoCallbacks2, nullptr, 0);
     }
 
     SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Starting connection: second window %s, second stream %s",
