@@ -760,6 +760,10 @@ bool Session::initialize(QQuickWindow* qtWindow)
     // secondWindowHeight, secondWindowFps and secondWindowBitrate). Empty means no second window.
     {
         QString secondTitle = m_Preferences->secondWindowTitle;
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "Second window request: title [%s] (command line), host uuid [%s]",
+                    m_Preferences->secondWindowTitle.toUtf8().constData(),
+                    m_Computer->uuid.toUtf8().constData());
         int secondWidth = 1280, secondHeight = 720, secondFps = 60, secondBitrate = 8000;
 
         if (!m_Computer->uuid.isEmpty()) {
@@ -774,6 +778,8 @@ bool Session::initialize(QQuickWindow* qtWindow)
             secondBitrate = seatSettings.value("secondWindowBitrate", secondBitrate).toInt();
             seatSettings.endGroup();
         }
+
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Second window final title [%s]", secondTitle.toUtf8().constData());
 
         if (!secondTitle.isEmpty()) {
             QByteArray source = ("window:" + secondTitle).toUtf8();
@@ -1823,6 +1829,10 @@ bool Session::startConnectionAsync()
             LiSetSecondVideoStreamCallbacks(&m_VideoCallbacks2, nullptr, 0);
         }
     }
+
+    SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Starting connection: second window %s, second stream %s",
+                m_SecondWindow != nullptr ? "set" : "not set",
+                m_StreamConfig.enableSecondVideoStream ? "requested" : "not requested");
 
     int err = LiStartConnection(&hostInfo, &m_StreamConfig, &k_ConnCallbacks,
                                 &m_VideoCallbacks, &m_AudioCallbacks,
