@@ -12,6 +12,7 @@
 #include "video/overlaymanager.h"
 
 class MicrophoneCapture;
+class SecondaryStreamWindow;
 
 namespace UsbForwarding {
 class Manager;
@@ -100,6 +101,7 @@ class Session : public QObject
     Q_OBJECT
 
     friend class SdlInputHandler;
+    friend class SecondaryStreamWindow;
     friend class DeferredSessionCleanupTask;
     friend class AsyncConnectionStartThread;
 
@@ -240,6 +242,9 @@ private:
     void clSetAdaptiveTriggers(uint16_t controllerNumber, uint8_t eventFlags, uint8_t typeLeft, uint8_t typeRight, uint8_t *left, uint8_t *right);
 
     static
+    void clVideoStreamEnded(int streamIndex, int reason);
+
+    static
     int arInit(int audioConfiguration,
                const POPUS_MULTISTREAM_CONFIGURATION opusConfig,
                void* arContext, int arFlags);
@@ -264,6 +269,8 @@ private:
     SupportedVideoFormatList m_SupportedVideoFormats; // Sorted in order of descending priority
     STREAM_CONFIGURATION m_StreamConfig;
     DECODER_RENDERER_CALLBACKS m_VideoCallbacks;
+    DECODER_RENDERER_CALLBACKS m_VideoCallbacks2;
+    SecondaryStreamWindow* m_SecondWindow;
     AUDIO_RENDERER_CALLBACKS m_AudioCallbacks;
     NvComputer* m_Computer;
     NvApp m_App;

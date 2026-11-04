@@ -213,6 +213,10 @@ public:
     bool enableMdns;
     bool quitAppAfter;
     bool absoluteMouseMode;
+
+    // Title of a window on the host to show in a second client window. Not saved: it comes from the command line
+    // (--second-window) or from the per-seat setting, and empty means no second window.
+    QString secondWindowTitle;
     bool absoluteTouchMode;
     bool framePacing;
     bool connectionWarnings;

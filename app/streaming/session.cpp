@@ -1,4 +1,5 @@
 #include "session.h"
+#include "secondarystream.h"
 #include "settings/streamingpreferences.h"
 #include "streaming/streamutils.h"
 #include <QSettings>
@@ -34,6 +35,7 @@
 #define SDL_CODE_GAMECONTROLLER_SET_MOTION_EVENT_STATE 103
 #define SDL_CODE_GAMECONTROLLER_SET_CONTROLLER_LED 104
 #define SDL_CODE_GAMECONTROLLER_SET_ADAPTIVE_TRIGGERS 105
+#define SDL_CODE_SECOND_STREAM_ENDED 106
 
 #include <openssl/rand.h>
 
@@ -66,7 +68,8 @@ CONNECTION_LISTENER_CALLBACKS Session::k_ConnCallbacks = {
     Session::clRumbleTriggers,
     Session::clSetMotionEventState,
     Session::clSetControllerLED,
-    Session::clSetAdaptiveTriggers
+    Session::clSetAdaptiveTriggers,
+    Session::clVideoStreamEnded
 };
 
 Session* Session::s_ActiveSession;
@@ -201,6 +204,23 @@ void Session::clConnectionStatusUpdate(int connectionStatus)
     case CONN_STATUS_OKAY:
         s_ActiveSession->m_OverlayManager.setOverlayState(Overlay::OverlayStatusUpdate, false);
         break;
+    }
+}
+
+void Session::clVideoStreamEnded(int streamIndex, int reason)
+{
+    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                "Video stream %d ended (reason %d)",
+                streamIndex, reason);
+
+    // Only the second stream can end on its own. Its window belongs to the main thread, so hand it over.
+    if (streamIndex == 1) {
+        SDL_Event event;
+        event.type = SDL_USEREVENT;
+        event.user.code = SDL_CODE_SECOND_STREAM_ENDED;
+        event.user.data1 = nullptr;
+        event.user.data2 = nullptr;
+        SDL_PushEvent(&event);
     }
 }
 
@@ -573,6 +593,7 @@ bool Session::populateDecoderProperties(SDL_Window* window)
 Session::Session(NvComputer* computer, NvApp& app, StreamingPreferences *preferences)
     : m_Preferences(preferences ? preferences : StreamingPreferences::get()),
       m_IsFullScreen(m_Preferences->windowMode != StreamingPreferences::WM_WINDOWED || !WMUtils::isRunningDesktopEnvironment()),
+      m_SecondWindow(nullptr),
       m_Computer(computer),
       m_App(app),
       m_Window(nullptr),
@@ -608,6 +629,8 @@ Session::~Session()
     destroyUsbForwarding();
 
     SDL_DestroyMutex(m_DecoderLock);
+
+    delete m_SecondWindow;
 }
 
 bool Session::initialize(QQuickWindow* qtWindow)
@@ -731,6 +754,45 @@ bool Session::initialize(QQuickWindow* qtWindow)
     // Only the first 4 bytes are populated in the RI key IV
     RAND_bytes(reinterpret_cast<unsigned char*>(m_StreamConfig.remoteInputAesIv), 4);
     m_StreamConfig.enableMic = m_Preferences->enableMicrophone;
+
+    // A second window showing one window of the host. The command line sets it for a run; for a seat it can also
+    // be set under seatprefs/<uuid>/ (secondWindow = the window title, and optionally secondWindowWidth,
+    // secondWindowHeight, secondWindowFps and secondWindowBitrate). Empty means no second window.
+    {
+        QString secondTitle = m_Preferences->secondWindowTitle;
+        int secondWidth = 1280, secondHeight = 720, secondFps = 60, secondBitrate = 8000;
+
+        if (!m_Computer->uuid.isEmpty()) {
+            QSettings seatSettings;
+            seatSettings.beginGroup(QString("seatprefs/%1").arg(m_Computer->uuid));
+            if (secondTitle.isEmpty()) {
+                secondTitle = seatSettings.value("secondWindow", QString()).toString();
+            }
+            secondWidth = seatSettings.value("secondWindowWidth", secondWidth).toInt();
+            secondHeight = seatSettings.value("secondWindowHeight", secondHeight).toInt();
+            secondFps = seatSettings.value("secondWindowFps", secondFps).toInt();
+            secondBitrate = seatSettings.value("secondWindowBitrate", secondBitrate).toInt();
+            seatSettings.endGroup();
+        }
+
+        if (!secondTitle.isEmpty()) {
+            QByteArray source = ("window:" + secondTitle).toUtf8();
+            if (source.size() < (int)sizeof(m_StreamConfig.secondVideoSource) && secondWidth > 0 && secondHeight > 0 &&
+                    secondFps > 0 && secondBitrate > 0) {
+                m_StreamConfig.enableSecondVideoStream = true;
+                memcpy(m_StreamConfig.secondVideoSource, source.constData(), source.size() + 1);
+                m_StreamConfig.secondVideoWidth = secondWidth;
+                m_StreamConfig.secondVideoHeight = secondHeight;
+                m_StreamConfig.secondVideoFps = secondFps;
+                m_StreamConfig.secondVideoBitrateKbps = secondBitrate;
+                m_SecondWindow = new SecondaryStreamWindow(this, secondTitle);
+            }
+            else {
+                SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                            "Ignoring the second window: the title is too long or the size, frame rate or bitrate is invalid");
+            }
+        }
+    }
 
     switch (m_Preferences->audioConfig)
     {
@@ -1745,6 +1807,23 @@ bool Session::startConnectionAsync()
                                                                          false);
     }
 
+    if (m_SecondWindow != nullptr) {
+        if (m_VideoCallbacks.capabilities & CAPABILITY_PULL_RENDERER) {
+            // The second window decodes the way the first one does not on pull-based platforms
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                        "The second window is not supported with a pull-based renderer");
+            m_StreamConfig.enableSecondVideoStream = false;
+        }
+        else {
+            LiInitializeVideoCallbacks(&m_VideoCallbacks2);
+            m_VideoCallbacks2.setup = SecondaryStreamWindow::drSetup;
+            m_VideoCallbacks2.cleanup = SecondaryStreamWindow::drCleanup;
+            m_VideoCallbacks2.submitDecodeUnit = SecondaryStreamWindow::drSubmitDecodeUnit;
+            m_VideoCallbacks2.capabilities = m_VideoCallbacks.capabilities;
+            LiSetSecondVideoStreamCallbacks(&m_VideoCallbacks2, nullptr, 0);
+        }
+    }
+
     int err = LiStartConnection(&hostInfo, &m_StreamConfig, &k_ConnCallbacks,
                                 &m_VideoCallbacks, &m_AudioCallbacks,
                                 NULL, 0, NULL, 0);
@@ -2159,6 +2238,18 @@ void Session::exec()
     // Switch to async logging mode when we enter the SDL loop
     StreamUtils::enterAsyncLoggingMode();
 
+    // Show the second window, if the host agreed to send the second stream
+    if (m_SecondWindow != nullptr) {
+        if (!LiIsSecondVideoStreamActive()) {
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                        "The second window was requested, but the host did not start a second video stream");
+        }
+        else if (!m_SecondWindow->open()) {
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                        "The second window could not be opened; continuing with one");
+        }
+    }
+
     // Hijack this thread to be the SDL main thread. We have to do this
     // because we want to suspend all Qt processing until the stream is over.
     SDL_Event event;
@@ -2207,6 +2298,18 @@ void Session::exec()
             case SDL_CODE_FRAME_READY:
                 if (m_VideoDecoder != nullptr) {
                     m_VideoDecoder->renderFrameOnMainThread();
+                }
+                // The event does not say which stream the frame is for, and a decoder with nothing queued
+                // does nothing, so give both a turn.
+                if (m_SecondWindow != nullptr) {
+                    m_SecondWindow->renderFrameOnMainThread();
+                }
+                break;
+            case SDL_CODE_SECOND_STREAM_ENDED:
+                // The host ended the second stream (for example its window was closed). The session carries on.
+                if (m_SecondWindow != nullptr) {
+                    m_SecondWindow->close();
+                    LiSetInputTargetStream(0);
                 }
                 break;
             case SDL_CODE_FLUSH_WINDOW_EVENT_BARRIER:
@@ -2263,6 +2366,21 @@ void Session::exec()
             }
 
             presence.runCallbacks();
+
+            // Events of the second window are its own business; they must not recreate the first window's decoder
+            if (m_SecondWindow != nullptr && m_SecondWindow->ownsWindow(event.window.windowID)) {
+                m_SecondWindow->handleWindowEvent(event.window);
+                break;
+            }
+
+            // With a second window open, closing the first one no longer ends the program by itself (SDL only
+            // quits when the last window closes), so treat it as the quit it has always been.
+            if (m_SecondWindow != nullptr && event.window.event == SDL_WINDOWEVENT_CLOSE &&
+                    event.window.windowID == SDL_GetWindowID(m_Window)) {
+                SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                            "The first window was closed");
+                goto DispatchDeferredCleanup;
+            }
 
             // Capture the mouse on SDL_WINDOWEVENT_ENTER if needed
             if (needsFirstEnterCapture && event.window.event == SDL_WINDOWEVENT_ENTER) {
@@ -2454,9 +2572,23 @@ void Session::exec()
         case SDL_MOUSEBUTTONDOWN:
         case SDL_MOUSEBUTTONUP:
             presence.runCallbacks();
+            if (m_SecondWindow != nullptr) {
+                if (m_SecondWindow->ownsWindow(event.button.windowID)) {
+                    m_SecondWindow->handleMouseButton(&event.button);
+                    break;
+                }
+                LiSetInputTargetStream(0);
+            }
             m_InputHandler->handleMouseButtonEvent(&event.button);
             break;
         case SDL_MOUSEMOTION:
+            if (m_SecondWindow != nullptr) {
+                if (m_SecondWindow->ownsWindow(event.motion.windowID)) {
+                    m_SecondWindow->handleMouseMotion(&event.motion);
+                    break;
+                }
+                LiSetInputTargetStream(0);
+            }
             m_InputHandler->handleMouseMotionEvent(&event.motion);
             break;
         case SDL_MOUSEWHEEL:
@@ -2546,6 +2678,13 @@ DispatchDeferredCleanup:
     delete m_VideoDecoder;
     m_VideoDecoder = nullptr;
     SDL_UnlockMutex(m_DecoderLock);
+
+    // The second window's decoder and window go too, for the same reason.
+    // The object itself stays until the session is destroyed: the connection's
+    // callbacks may still run until LiStopConnection().
+    if (m_SecondWindow != nullptr) {
+        m_SecondWindow->close();
+    }
 
     // Propagate state changes from the SDL window back to the Qt window
     //
