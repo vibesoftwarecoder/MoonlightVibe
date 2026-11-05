@@ -817,6 +817,81 @@ Flickable {
                     ToolTip.text: qsTr("Fullscreen generally provides the best performance, but borderless windowed may work better with features like macOS Spaces, Alt+Tab, screenshot tools, on-screen overlays, etc.")
                 }
 
+                Label {
+                    width: parent.width
+                    id: primaryWindowDisplayTitle
+                    text: qsTr("Stream window display")
+                    font.pointSize: 12
+                    wrapMode: Text.Wrap
+                    visible: SystemProperties.hasDesktopEnvironment
+                }
+
+                AutoResizingComboBox {
+                    function createModel() {
+                        var model = Qt.createQmlObject('import QtQuick 2.0; ListModel {}', parent, '')
+
+                        model.append({
+                                         text: qsTr("Automatic"),
+                                         val: 0
+                                     })
+
+                        // Refresh display data before using it to build the list
+                        SystemProperties.refreshDisplays()
+                        for (var displayIndex = 0; ; displayIndex++) {
+                            var rect = SystemProperties.getNativeResolution(displayIndex)
+                            if (rect.width <= 0 || rect.height <= 0) {
+                                break
+                            }
+
+                            model.append({
+                                             text: qsTr("Display %1").arg(displayIndex + 1) + " (" + rect.width + "x" + rect.height + ")",
+                                             val: displayIndex + 1
+                                         })
+                        }
+
+                        return model
+                    }
+
+                    // This is used on initialization and upon retranslation
+                    function reinitialize() {
+                        if (!visible) {
+                            return
+                        }
+
+                        model = createModel()
+                        currentIndex = 0
+
+                        // Set the current value based on the saved preferences
+                        var saved = StreamingPreferences.primaryWindowDisplay
+                        for (var i = 0; i < model.count; i++) {
+                            if (saved === model.get(i).val) {
+                                currentIndex = i
+                                break
+                            }
+                        }
+
+                        activated(currentIndex)
+                    }
+
+                    Component.onCompleted: {
+                        reinitialize()
+                        languageChanged.connect(reinitialize)
+                    }
+
+                    id: primaryWindowDisplayComboBox
+                    visible: SystemProperties.hasDesktopEnvironment
+                    hoverEnabled: true
+                    textRole: "text"
+                    onActivated: {
+                        StreamingPreferences.primaryWindowDisplay = model.get(currentIndex).val
+                    }
+
+                    ToolTip.delay: 1000
+                    ToolTip.timeout: 5000
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Which display the stream window opens on. Automatic uses the display this app is on.")
+                }
+
                 Row {
                     spacing: 5
                     width: parent.width
@@ -875,6 +950,345 @@ Flickable {
                                       qsTr("The stream will be HDR-capable, but some games may require an HDR monitor on your host PC to enable HDR mode.")
                                     :
                                       qsTr("HDR streaming is not supported on this PC.")
+                }
+            }
+        }
+
+        GroupBox {
+            id: secondWindowGroupBox
+            width: (parent.width - (parent.leftPadding + parent.rightPadding))
+            padding: 12
+            title: "<font color=\"skyblue\">" + qsTr("Second Window") + "</font>"
+            font.pointSize: 12
+            visible: SystemProperties.hasDesktopEnvironment
+
+            Column {
+                anchors.fill: parent
+                spacing: 5
+
+                CheckBox {
+                    id: secondWindowCheck
+                    width: parent.width
+                    text: qsTr("Show a second window")
+                    font.pointSize: 12
+                    checked: StreamingPreferences.secondWindowEnabled
+                    onCheckedChanged: {
+                        StreamingPreferences.secondWindowEnabled = checked
+                    }
+
+                    ToolTip.delay: 1000
+                    ToolTip.timeout: 5000
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Streams a second picture of the host, a window, in a window of its own. The host must be running ApolloVibe with the second video stream turned on; otherwise you get one window.")
+                }
+
+                Column {
+                    id: secondWindowOptions
+                    width: parent.width
+                    spacing: 5
+                    visible: secondWindowCheck.checked
+
+                    Label {
+                        width: parent.width
+                        id: secondWindowSourceLabel
+                        text: qsTr("What to show")
+                        font.pointSize: 12
+                        wrapMode: Text.Wrap
+                    }
+
+                    AutoResizingComboBox {
+                        function createModel() {
+                            var model = Qt.createQmlObject('import QtQuick 2.0; ListModel {}', parent, '')
+
+                            model.append({ text: qsTr("A window on the host"), val: 0 })
+                            model.append({ text: qsTr("A whole display (the host makes it)"), val: 1 })
+
+                            return model
+                        }
+
+                        function reinitialize() {
+                            if (!visible) {
+                                return
+                            }
+
+                            model = createModel()
+                            currentIndex = 0
+
+                            for (var i = 0; i < model.count; i++) {
+                                if (StreamingPreferences.secondWindowSource === model.get(i).val) {
+                                    currentIndex = i
+                                    break
+                                }
+                            }
+
+                            activated(currentIndex)
+                        }
+
+                        Component.onCompleted: {
+                            reinitialize()
+                            languageChanged.connect(reinitialize)
+                        }
+
+                        id: secondWindowSourceComboBox
+                        onVisibleChanged: if (visible) reinitialize()
+                        hoverEnabled: true
+                        textRole: "text"
+                        onActivated: {
+                            StreamingPreferences.secondWindowSource = model.get(currentIndex).val
+                        }
+
+                        ToolTip.delay: 1000
+                        ToolTip.timeout: 5000
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("A window shows one window of the host. A whole display makes an extra monitor on the host that you can drag apps onto; it needs a host that can make a virtual display, such as a console, not a seat.")
+                    }
+
+                    Label {
+                        width: parent.width
+                        text: qsTr("A whole display needs the console host. On a seat, choose a window.")
+                        font.pointSize: 9
+                        wrapMode: Text.Wrap
+                        opacity: 0.7
+                    }
+
+                    Label {
+                        width: parent.width
+                        id: secondWindowTitleLabel
+                        visible: StreamingPreferences.secondWindowSource === 0
+                        text: qsTr("Title of the host window")
+                        font.pointSize: 12
+                        wrapMode: Text.Wrap
+                    }
+
+                    TextField {
+                        id: secondWindowTitleField
+                    visible: StreamingPreferences.secondWindowSource === 0
+                        width: parent.width
+                        hoverEnabled: true
+                        placeholderText: qsTr("Empty means no second window")
+                        text: StreamingPreferences.secondWindowTitle
+                        onTextEdited: {
+                            StreamingPreferences.secondWindowTitle = text.trim()
+                        }
+
+                        ToolTip.delay: 1000
+                        ToolTip.timeout: 5000
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Type the title of a window on the host to show it in a second window. Leave it empty for one window. A host that does not offer a second stream ignores this.")
+                    }
+
+
+                    Label {
+                        width: parent.width
+                        id: secondWindowResolutionTitle
+                        text: qsTr("Resolution")
+                        font.pointSize: 12
+                        wrapMode: Text.Wrap
+                    }
+
+                    AutoResizingComboBox {
+                        function createModel() {
+                            var model = Qt.createQmlObject('import QtQuick 2.0; ListModel {}', parent, '')
+
+                            model.append({ text: "1280x720", w: 1280, h: 720 })
+                            model.append({ text: "1920x1080", w: 1920, h: 1080 })
+                            model.append({ text: "2560x1440", w: 2560, h: 1440 })
+                            model.append({ text: "3840x2160", w: 3840, h: 2160 })
+
+                            return model
+                        }
+
+                        function reinitialize() {
+                            if (!visible) {
+                                return
+                            }
+
+                            model = createModel()
+                            currentIndex = 1
+
+                            for (var i = 0; i < model.count; i++) {
+                                if (StreamingPreferences.secondWindowWidth === model.get(i).w &&
+                                        StreamingPreferences.secondWindowHeight === model.get(i).h) {
+                                    currentIndex = i
+                                    break
+                                }
+                            }
+
+                            activated(currentIndex)
+                        }
+
+                        Component.onCompleted: {
+                            reinitialize()
+                        }
+
+                        id: secondWindowResolutionComboBox
+                        onVisibleChanged: if (visible) reinitialize()
+                        hoverEnabled: true
+                        textRole: "text"
+                        onActivated: {
+                            StreamingPreferences.secondWindowWidth = model.get(currentIndex).w
+                            StreamingPreferences.secondWindowHeight = model.get(currentIndex).h
+                        }
+
+                        ToolTip.delay: 1000
+                        ToolTip.timeout: 5000
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("The size of the video of the second window. A larger size is sharper when the window is large or fullscreen, and uses more bandwidth.")
+                    }
+
+
+                    Label {
+                        width: parent.width
+                        id: secondWindowFpsTitle
+                        text: qsTr("Frame rate")
+                        font.pointSize: 12
+                        wrapMode: Text.Wrap
+                    }
+
+                    AutoResizingComboBox {
+                        function createModel() {
+                            var model = Qt.createQmlObject('import QtQuick 2.0; ListModel {}', parent, '')
+
+                            model.append({ text: "30 FPS", val: 30 })
+                            model.append({ text: "60 FPS", val: 60 })
+
+                            return model
+                        }
+
+                        function reinitialize() {
+                            if (!visible) {
+                                return
+                            }
+
+                            model = createModel()
+                            currentIndex = 1
+
+                            for (var i = 0; i < model.count; i++) {
+                                if (StreamingPreferences.secondWindowFps === model.get(i).val) {
+                                    currentIndex = i
+                                    break
+                                }
+                            }
+
+                            activated(currentIndex)
+                        }
+
+                        Component.onCompleted: {
+                            reinitialize()
+                        }
+
+                        id: secondWindowFpsComboBox
+                        onVisibleChanged: if (visible) reinitialize()
+                        hoverEnabled: true
+                        textRole: "text"
+                        onActivated: {
+                            StreamingPreferences.secondWindowFps = model.get(currentIndex).val
+                        }
+
+                        ToolTip.delay: 1000
+                        ToolTip.timeout: 5000
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("The frame rate of the video of the second window. 30 is enough for most windows and uses less bandwidth.")
+                    }
+
+
+                    Label {
+                        width: parent.width
+                        id: secondWindowDisplayTitle
+                        text: qsTr("Show it on this display")
+                        font.pointSize: 12
+                        wrapMode: Text.Wrap
+                    }
+
+                    AutoResizingComboBox {
+                        function createModel() {
+                            var model = Qt.createQmlObject('import QtQuick 2.0; ListModel {}', parent, '')
+
+                            model.append({
+                                             text: qsTr("Automatic"),
+                                             val: 0
+                                         })
+
+                            // Refresh display data before using it to build the list
+                            SystemProperties.refreshDisplays()
+                            for (var displayIndex = 0; ; displayIndex++) {
+                                var rect = SystemProperties.getNativeResolution(displayIndex)
+                                if (rect.width <= 0 || rect.height <= 0) {
+                                    break
+                                }
+
+                                model.append({
+                                                 text: qsTr("Display %1").arg(displayIndex + 1) + " (" + rect.width + "x" + rect.height + ")",
+                                                 val: displayIndex + 1
+                                             })
+                            }
+
+                            return model
+                        }
+
+                        // This is used on initialization and upon retranslation
+                        function reinitialize() {
+                            if (!visible) {
+                                return
+                            }
+
+                            model = createModel()
+                            currentIndex = 0
+
+                            // Set the current value based on the saved preferences
+                            var saved = StreamingPreferences.secondWindowDisplay
+                            for (var i = 0; i < model.count; i++) {
+                                if (saved === model.get(i).val) {
+                                    currentIndex = i
+                                    break
+                                }
+                            }
+
+                            activated(currentIndex)
+                        }
+
+                        Component.onCompleted: {
+                            reinitialize()
+                            languageChanged.connect(reinitialize)
+                        }
+
+                        id: secondWindowDisplayComboBox
+                        onVisibleChanged: if (visible) reinitialize()
+                        hoverEnabled: true
+                        textRole: "text"
+                        onActivated: {
+                            StreamingPreferences.secondWindowDisplay = model.get(currentIndex).val
+                        }
+
+                        ToolTip.delay: 1000
+                        ToolTip.timeout: 5000
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Which display the second window opens on, when a second window is used. Automatic picks a display the stream window is not on.")
+                    }
+
+                    CheckBox {
+                        id: secondWindowFullscreenCheck
+                        width: parent.width
+                        text: qsTr("Open the second window in full screen")
+                        font.pointSize: 12
+                        checked: StreamingPreferences.secondWindowFullscreen
+                        onCheckedChanged: {
+                            StreamingPreferences.secondWindowFullscreen = checked
+                        }
+
+                        ToolTip.delay: 1000
+                        ToolTip.timeout: 5000
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Opens the second window borderless on the display it goes to, as if F11 had already been pressed. F11 switches it back to a window.")
+                    }
+
+                    Label {
+                        width: parent.width
+                        text: qsTr("Press F11 in the second window to switch it to full screen and back.")
+                        font.pointSize: 9
+                        wrapMode: Text.Wrap
+                        opacity: 0.7
+                    }
                 }
             }
         }
@@ -1576,6 +1990,24 @@ Flickable {
                     ToolTip.visible: hovered
                     ToolTip.text: qsTr("Prevents the screensaver from starting or the display from going to sleep while streaming.")
                 }
+
+                CheckBox {
+                    id: showPerformanceOverlay
+                    width: parent.width
+                    text: qsTr("Show performance stats while streaming")
+                    font.pointSize: 12
+                    checked: StreamingPreferences.showPerformanceOverlay
+                    onCheckedChanged: {
+                        StreamingPreferences.showPerformanceOverlay = checked
+                    }
+
+                    ToolTip.delay: 1000
+                    ToolTip.timeout: 5000
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Display real-time stream performance information while streaming.") + "\n\n" +
+                                  qsTr("You can toggle it at any time while streaming using Ctrl+Alt+Shift+S or Select+L1+R1+X.") + "\n\n" +
+                                  qsTr("The performance overlay is not supported on Steam Link or Raspberry Pi.")
+                }
             }
         }
     }
@@ -2101,24 +2533,6 @@ Flickable {
                     onCheckedChanged: {
                         StreamingPreferences.detectNetworkBlocking = checked
                     }
-                }
-
-                CheckBox {
-                    id: showPerformanceOverlay
-                    width: parent.width
-                    text: qsTr("Show performance stats while streaming")
-                    font.pointSize: 12
-                    checked: StreamingPreferences.showPerformanceOverlay
-                    onCheckedChanged: {
-                        StreamingPreferences.showPerformanceOverlay = checked
-                    }
-
-                    ToolTip.delay: 1000
-                    ToolTip.timeout: 5000
-                    ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Display real-time stream performance information while streaming.") + "\n\n" +
-                                  qsTr("You can toggle it at any time while streaming using Ctrl+Alt+Shift+S or Select+L1+R1+X.") + "\n\n" +
-                                  qsTr("The performance overlay is not supported on Steam Link or Raspberry Pi.")
                 }
 
                 CheckBox {

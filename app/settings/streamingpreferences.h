@@ -177,6 +177,15 @@ public:
     Q_PROPERTY(WindowMode windowMode MEMBER windowMode NOTIFY windowModeChanged)
     Q_PROPERTY(WindowMode recommendedFullScreenMode MEMBER recommendedFullScreenMode CONSTANT)
     Q_PROPERTY(UIDisplayMode uiDisplayMode MEMBER uiDisplayMode NOTIFY uiDisplayModeChanged)
+    Q_PROPERTY(int primaryWindowDisplay MEMBER primaryWindowDisplay NOTIFY primaryWindowDisplayChanged)
+    Q_PROPERTY(int secondWindowDisplay MEMBER secondWindowDisplay NOTIFY secondWindowDisplayChanged)
+    Q_PROPERTY(int secondWindowWidth MEMBER secondWindowWidth NOTIFY secondWindowVideoChanged)
+    Q_PROPERTY(int secondWindowHeight MEMBER secondWindowHeight NOTIFY secondWindowVideoChanged)
+    Q_PROPERTY(int secondWindowFps MEMBER secondWindowFps NOTIFY secondWindowVideoChanged)
+    Q_PROPERTY(bool secondWindowEnabled MEMBER secondWindowEnabled NOTIFY secondWindowEnabledChanged)
+    Q_PROPERTY(int secondWindowSource MEMBER secondWindowSource NOTIFY secondWindowSourceChanged)
+    Q_PROPERTY(bool secondWindowFullscreen MEMBER secondWindowFullscreen NOTIFY secondWindowFullscreenChanged)
+    Q_PROPERTY(QString secondWindowTitle MEMBER secondWindowTitle NOTIFY secondWindowTitleChanged)
     Q_PROPERTY(bool swapMouseButtons MEMBER swapMouseButtons NOTIFY mouseButtonsChanged)
     Q_PROPERTY(bool muteOnFocusLoss MEMBER muteOnFocusLoss NOTIFY muteOnFocusLossChanged)
     Q_PROPERTY(bool usbForwardingEnabled MEMBER usbForwardingEnabled NOTIFY usbForwardingEnabledChanged)
@@ -213,6 +222,17 @@ public:
     bool enableMdns;
     bool quitAppAfter;
     bool absoluteMouseMode;
+
+    // Title of a window on the host to show in a second client window. Saved, and --second-window overrides it for
+    // a run; a per-seat setting fills it in when empty. Empty means no second window. A host that does not offer a
+    // second stream is never asked for one, so a saved title is harmless there.
+    // The Settings check box. --second-window switches it on for a run.
+    bool secondWindowEnabled;
+    // What the second window shows: 0 = a window of the host (by title), 1 = a whole display the host makes
+    int secondWindowSource;
+    // Open the second window in full screen, as if F11 had been pressed
+    bool secondWindowFullscreen;
+    QString secondWindowTitle;
     bool absoluteTouchMode;
     bool framePacing;
     bool connectionWarnings;
@@ -242,6 +262,15 @@ public:
     WindowMode windowMode;
     WindowMode recommendedFullScreenMode;
     UIDisplayMode uiDisplayMode;
+
+    // Which display each stream window opens on: 0 picks one automatically, 1 is the first display, 2 the second
+    int primaryWindowDisplay;
+    int secondWindowDisplay;
+
+    // The video stream of the second window: its size and frame rate (its bitrate follows from them)
+    int secondWindowWidth;
+    int secondWindowHeight;
+    int secondWindowFps;
     Language language;
     CaptureSysKeysMode captureSysKeysMode;
     GamepadQuitCombo gamepadQuitCombo;
@@ -267,6 +296,13 @@ signals:
     void enableYUV444Changed();
     void videoDecoderSelectionChanged();
     void uiDisplayModeChanged();
+    void primaryWindowDisplayChanged();
+    void secondWindowDisplayChanged();
+    void secondWindowVideoChanged();
+    void secondWindowTitleChanged();
+    void secondWindowEnabledChanged();
+    void secondWindowSourceChanged();
+    void secondWindowFullscreenChanged();
     void windowModeChanged();
     void framePacingChanged();
     void connectionWarningsChanged();

@@ -354,7 +354,14 @@ void StreamCommandLineParser::parse(const QStringList &args, StreamingPreference
     parser.addChoiceOption("audio-config", "audio config", m_AudioConfigMap.keys());
     parser.addToggleOption("multi-controller", "multiple controller support");
     parser.addToggleOption("quit-after", "quit app after session");
+    parser.addToggleOption("second-window-fullscreen", "open the second window in full screen");
     parser.addToggleOption("absolute-mouse", "remote desktop optimized mouse control");
+    parser.addValueOption("second-window", "title of a host window to show in a second client window");
+    parser.addValueOption("window-display", "display number (1, 2, ...) for the stream window, 0 = automatic");
+    parser.addValueOption("second-window-source", "what the second window shows: window (a host window, the default) or display (a display the host makes)");
+    parser.addValueOption("second-window-resolution", "custom <width>x<height> resolution of the second window's video");
+    parser.addValueOption("second-window-fps", "frame rate of the second window's video");
+    parser.addValueOption("second-window-display", "display number (1, 2, ...) for the second window, 0 = automatic");
     parser.addToggleOption("mouse-buttons-swap", "left and right mouse buttons swap");
     parser.addToggleOption("touchscreen-trackpad", "touchscreen in trackpad mode");
     parser.addToggleOption("game-optimization", "game optimizations");
@@ -448,6 +455,44 @@ void StreamCommandLineParser::parse(const QStringList &args, StreamingPreference
 
     // Resolve --quit-after and --no-quit-after options
     preferences->quitAppAfter = parser.getToggleOptionValue("quit-after", preferences->quitAppAfter);
+    preferences->secondWindowFullscreen = parser.getToggleOptionValue("second-window-fullscreen", preferences->secondWindowFullscreen);
+
+    // Resolve --second-window option
+    if (parser.isSet("second-window")) {
+        preferences->secondWindowTitle = parser.value("second-window");
+        preferences->secondWindowEnabled = true;
+    }
+    if (parser.isSet("second-window-source")) {
+        QString source = parser.value("second-window-source").toLower();
+        if (source == "display") {
+            preferences->secondWindowSource = 1;
+            preferences->secondWindowEnabled = true;
+        }
+        else if (source == "window") {
+            preferences->secondWindowSource = 0;
+        }
+        else {
+            parser.showError(QString("Invalid second-window-source choice: %1").arg(source));
+        }
+    }
+
+    // Resolve --second-window-resolution and --second-window-fps options
+    if (parser.isSet("second-window-resolution")) {
+        auto resolution = parser.getResolutionOptionValue("second-window-resolution");
+        preferences->secondWindowWidth = resolution.first;
+        preferences->secondWindowHeight = resolution.second;
+    }
+    if (parser.isSet("second-window-fps")) {
+        preferences->secondWindowFps = parser.getIntOption("second-window-fps");
+    }
+
+    // Resolve --window-display and --second-window-display options
+    if (parser.isSet("window-display")) {
+        preferences->primaryWindowDisplay = qMax(0, parser.getIntOption("window-display"));
+    }
+    if (parser.isSet("second-window-display")) {
+        preferences->secondWindowDisplay = qMax(0, parser.getIntOption("second-window-display"));
+    }
 
     // Resolve --absolute-mouse and --no-absolute-mouse options
     preferences->absoluteMouseMode = parser.getToggleOptionValue("absolute-mouse", preferences->absoluteMouseMode);
