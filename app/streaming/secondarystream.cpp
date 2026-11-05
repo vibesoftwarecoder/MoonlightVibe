@@ -64,6 +64,12 @@ bool SecondaryStreamWindow::open()
     std::string title = (m_Session->m_Computer->name + " - " + m_Title).toStdString();
     Uint32 flags = SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE;
 
+    // Borderless full screen on the display it opens on, the same state F11 switches to. The window size chosen
+    // below is what it returns to when F11 is pressed again.
+    if (m_Session->m_Preferences->secondWindowFullscreen) {
+        flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
+    }
+
     // Open on the chosen display. Automatic means a display the first window is not on, if there is one, so that
     // the two windows do not land on top of each other.
     int displayCount = SDL_GetNumVideoDisplays();

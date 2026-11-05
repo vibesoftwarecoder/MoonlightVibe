@@ -354,6 +354,7 @@ void StreamCommandLineParser::parse(const QStringList &args, StreamingPreference
     parser.addChoiceOption("audio-config", "audio config", m_AudioConfigMap.keys());
     parser.addToggleOption("multi-controller", "multiple controller support");
     parser.addToggleOption("quit-after", "quit app after session");
+    parser.addToggleOption("second-window-fullscreen", "open the second window in full screen");
     parser.addToggleOption("absolute-mouse", "remote desktop optimized mouse control");
     parser.addValueOption("second-window", "title of a host window to show in a second client window");
     parser.addValueOption("window-display", "display number (1, 2, ...) for the stream window, 0 = automatic");
@@ -454,6 +455,7 @@ void StreamCommandLineParser::parse(const QStringList &args, StreamingPreference
 
     // Resolve --quit-after and --no-quit-after options
     preferences->quitAppAfter = parser.getToggleOptionValue("quit-after", preferences->quitAppAfter);
+    preferences->secondWindowFullscreen = parser.getToggleOptionValue("second-window-fullscreen", preferences->secondWindowFullscreen);
 
     // Resolve --second-window option
     if (parser.isSet("second-window")) {

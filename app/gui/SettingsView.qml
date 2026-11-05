@@ -1258,6 +1258,22 @@ Flickable {
                         ToolTip.text: qsTr("Which display the second window opens on, when a second window is used. Automatic picks a display the stream window is not on.")
                     }
 
+                    CheckBox {
+                        id: secondWindowFullscreenCheck
+                        width: parent.width
+                        text: qsTr("Open the second window in full screen")
+                        font.pointSize: 12
+                        checked: StreamingPreferences.secondWindowFullscreen
+                        onCheckedChanged: {
+                            StreamingPreferences.secondWindowFullscreen = checked
+                        }
+
+                        ToolTip.delay: 1000
+                        ToolTip.timeout: 5000
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Opens the second window borderless on the display it goes to, as if F11 had already been pressed. F11 switches it back to a window.")
+                    }
+
                     Label {
                         width: parent.width
                         text: qsTr("Press F11 in the second window to switch it to full screen and back.")
