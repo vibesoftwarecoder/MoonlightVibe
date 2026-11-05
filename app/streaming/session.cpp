@@ -759,7 +759,8 @@ bool Session::initialize(QQuickWindow* qtWindow)
     // overrides it for a run; for a seat it can also be set under seatprefs/<uuid>/ (secondWindow = the window title, and optionally secondWindowWidth,
     // secondWindowHeight, secondWindowFps and secondWindowBitrate). Empty means no second window.
     {
-        QString secondTitle = m_Preferences->secondWindowTitle;
+        // The check box in Settings turns the saved title on or off; the command line switches it on for a run
+        QString secondTitle = m_Preferences->secondWindowEnabled ? m_Preferences->secondWindowTitle : QString();
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
                     "Second window request: title [%s] (settings or command line), host uuid [%s]",
                     m_Preferences->secondWindowTitle.toUtf8().constData(),

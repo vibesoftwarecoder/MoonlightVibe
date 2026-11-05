@@ -182,6 +182,7 @@ public:
     Q_PROPERTY(int secondWindowWidth MEMBER secondWindowWidth NOTIFY secondWindowVideoChanged)
     Q_PROPERTY(int secondWindowHeight MEMBER secondWindowHeight NOTIFY secondWindowVideoChanged)
     Q_PROPERTY(int secondWindowFps MEMBER secondWindowFps NOTIFY secondWindowVideoChanged)
+    Q_PROPERTY(bool secondWindowEnabled MEMBER secondWindowEnabled NOTIFY secondWindowEnabledChanged)
     Q_PROPERTY(QString secondWindowTitle MEMBER secondWindowTitle NOTIFY secondWindowTitleChanged)
     Q_PROPERTY(bool swapMouseButtons MEMBER swapMouseButtons NOTIFY mouseButtonsChanged)
     Q_PROPERTY(bool muteOnFocusLoss MEMBER muteOnFocusLoss NOTIFY muteOnFocusLossChanged)
@@ -223,6 +224,8 @@ public:
     // Title of a window on the host to show in a second client window. Saved, and --second-window overrides it for
     // a run; a per-seat setting fills it in when empty. Empty means no second window. A host that does not offer a
     // second stream is never asked for one, so a saved title is harmless there.
+    // The Settings check box. --second-window switches it on for a run.
+    bool secondWindowEnabled;
     QString secondWindowTitle;
     bool absoluteTouchMode;
     bool framePacing;
@@ -291,6 +294,7 @@ signals:
     void secondWindowDisplayChanged();
     void secondWindowVideoChanged();
     void secondWindowTitleChanged();
+    void secondWindowEnabledChanged();
     void windowModeChanged();
     void framePacingChanged();
     void connectionWarningsChanged();

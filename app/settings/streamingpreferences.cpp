@@ -45,6 +45,7 @@
 #define SER_SECONDWINDOWHEIGHT "secondwindowheight"
 #define SER_SECONDWINDOWFPS "secondwindowfps"
 #define SER_SECONDWINDOWTITLE "secondwindowtitle"
+#define SER_SECONDWINDOWENABLED "secondwindowenabled"
 #define SER_RICHPRESENCE "richpresence"
 #define SER_GAMEPADMOUSE "gamepadmouse"
 #define SER_DEFAULTVER "defaultver"
@@ -208,6 +209,7 @@ void StreamingPreferences::reload()
     secondWindowHeight = settings.value(SER_SECONDWINDOWHEIGHT, 1080).toInt();
     secondWindowFps = settings.value(SER_SECONDWINDOWFPS, 60).toInt();
     secondWindowTitle = settings.value(SER_SECONDWINDOWTITLE, QString()).toString();
+    secondWindowEnabled = settings.value(SER_SECONDWINDOWENABLED, false).toBool();
     language = static_cast<Language>(settings.value(SER_LANGUAGE,
                                                     static_cast<int>(Language::LANG_AUTO)).toInt());
 
@@ -402,6 +404,7 @@ void StreamingPreferences::save()
     settings.setValue(SER_SECONDWINDOWHEIGHT, secondWindowHeight);
     settings.setValue(SER_SECONDWINDOWFPS, secondWindowFps);
     settings.setValue(SER_SECONDWINDOWTITLE, secondWindowTitle);
+    settings.setValue(SER_SECONDWINDOWENABLED, secondWindowEnabled);
     settings.setValue(SER_LANGUAGE, static_cast<int>(language));
     settings.setValue(SER_DEFAULTVER, CURRENT_DEFAULT_VER);
     settings.setValue(SER_SWAPMOUSEBUTTONS, swapMouseButtons);

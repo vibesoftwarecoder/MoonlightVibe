@@ -457,6 +457,7 @@ void StreamCommandLineParser::parse(const QStringList &args, StreamingPreference
     // Resolve --second-window option
     if (parser.isSet("second-window")) {
         preferences->secondWindowTitle = parser.value("second-window");
+        preferences->secondWindowEnabled = true;
     }
 
     // Resolve --second-window-resolution and --second-window-fps options
