@@ -789,8 +789,14 @@ bool Session::initialize(QQuickWindow* qtWindow)
 
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Second window final title [%s]", secondTitle.toUtf8().constData());
 
+        // A whole display needs no title: the host makes it. The name is only the window's title bar.
+        const bool secondDisplay = m_Preferences->secondWindowEnabled && m_Preferences->secondWindowSource == 1;
+        if (secondDisplay) {
+            secondTitle = tr("Second display");
+        }
+
         if (!secondTitle.isEmpty()) {
-            QByteArray source = ("window:" + secondTitle).toUtf8();
+            QByteArray source = secondDisplay ? QByteArray("display:auto") : ("window:" + secondTitle).toUtf8();
             if (source.size() < (int)sizeof(m_StreamConfig.secondVideoSource) && secondWidth > 0 && secondHeight > 0 &&
                     secondFps > 0 && secondBitrate > 0) {
                 m_StreamConfig.enableSecondVideoStream = true;

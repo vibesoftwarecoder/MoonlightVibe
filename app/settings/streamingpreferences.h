@@ -183,6 +183,7 @@ public:
     Q_PROPERTY(int secondWindowHeight MEMBER secondWindowHeight NOTIFY secondWindowVideoChanged)
     Q_PROPERTY(int secondWindowFps MEMBER secondWindowFps NOTIFY secondWindowVideoChanged)
     Q_PROPERTY(bool secondWindowEnabled MEMBER secondWindowEnabled NOTIFY secondWindowEnabledChanged)
+    Q_PROPERTY(int secondWindowSource MEMBER secondWindowSource NOTIFY secondWindowSourceChanged)
     Q_PROPERTY(QString secondWindowTitle MEMBER secondWindowTitle NOTIFY secondWindowTitleChanged)
     Q_PROPERTY(bool swapMouseButtons MEMBER swapMouseButtons NOTIFY mouseButtonsChanged)
     Q_PROPERTY(bool muteOnFocusLoss MEMBER muteOnFocusLoss NOTIFY muteOnFocusLossChanged)
@@ -226,6 +227,8 @@ public:
     // second stream is never asked for one, so a saved title is harmless there.
     // The Settings check box. --second-window switches it on for a run.
     bool secondWindowEnabled;
+    // What the second window shows: 0 = a window of the host (by title), 1 = a whole display the host makes
+    int secondWindowSource;
     QString secondWindowTitle;
     bool absoluteTouchMode;
     bool framePacing;
@@ -295,6 +298,7 @@ signals:
     void secondWindowVideoChanged();
     void secondWindowTitleChanged();
     void secondWindowEnabledChanged();
+    void secondWindowSourceChanged();
     void windowModeChanged();
     void framePacingChanged();
     void connectionWarningsChanged();

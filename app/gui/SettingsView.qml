@@ -990,7 +990,63 @@ Flickable {
 
                     Label {
                         width: parent.width
+                        id: secondWindowSourceLabel
+                        text: qsTr("What to show")
+                        font.pointSize: 12
+                        wrapMode: Text.Wrap
+                    }
+
+                    AutoResizingComboBox {
+                        function createModel() {
+                            var model = Qt.createQmlObject('import QtQuick 2.0; ListModel {}', parent, '')
+
+                            model.append({ text: qsTr("A window on the host"), val: 0 })
+                            model.append({ text: qsTr("A whole display (the host makes it)"), val: 1 })
+
+                            return model
+                        }
+
+                        function reinitialize() {
+                            if (!visible) {
+                                return
+                            }
+
+                            model = createModel()
+                            currentIndex = 0
+
+                            for (var i = 0; i < model.count; i++) {
+                                if (StreamingPreferences.secondWindowSource === model.get(i).val) {
+                                    currentIndex = i
+                                    break
+                                }
+                            }
+
+                            activated(currentIndex)
+                        }
+
+                        Component.onCompleted: {
+                            reinitialize()
+                            languageChanged.connect(reinitialize)
+                        }
+
+                        id: secondWindowSourceComboBox
+                        onVisibleChanged: if (visible) reinitialize()
+                        hoverEnabled: true
+                        textRole: "text"
+                        onActivated: {
+                            StreamingPreferences.secondWindowSource = model.get(currentIndex).val
+                        }
+
+                        ToolTip.delay: 1000
+                        ToolTip.timeout: 5000
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("A window shows one window of the host. A whole display makes an extra monitor on the host that you can drag apps onto; it needs a host that can make a virtual display, such as a console, not a seat.")
+                    }
+
+                    Label {
+                        width: parent.width
                         id: secondWindowTitleLabel
+                        visible: StreamingPreferences.secondWindowSource === 0
                         text: qsTr("Title of the host window")
                         font.pointSize: 12
                         wrapMode: Text.Wrap
@@ -998,6 +1054,7 @@ Flickable {
 
                     TextField {
                         id: secondWindowTitleField
+                    visible: StreamingPreferences.secondWindowSource === 0
                         width: parent.width
                         hoverEnabled: true
                         placeholderText: qsTr("Empty means no second window")
