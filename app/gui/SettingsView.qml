@@ -1045,6 +1045,14 @@ Flickable {
 
                     Label {
                         width: parent.width
+                        text: qsTr("A whole display needs the console host. On a seat, choose a window.")
+                        font.pointSize: 9
+                        wrapMode: Text.Wrap
+                        opacity: 0.7
+                    }
+
+                    Label {
+                        width: parent.width
                         id: secondWindowTitleLabel
                         visible: StreamingPreferences.secondWindowSource === 0
                         text: qsTr("Title of the host window")
