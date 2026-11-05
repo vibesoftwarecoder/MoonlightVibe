@@ -107,6 +107,11 @@ bool SecondaryStreamWindow::open()
     SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Second window goes on display %d of %d (first window is on %d)",
                 display >= 0 ? display + 1 : 0, displayCount, mainDisplay + 1);
 
+    // The first window keeps the keyboard focus and the mouse capture. A second window that takes focus when it
+    // opens leaves the first one unable to capture, and its mouse events then map onto the second picture.
+#ifdef SDL_HINT_WINDOW_NO_ACTIVATION_WHEN_SHOWN
+    SDL_SetHint(SDL_HINT_WINDOW_NO_ACTIVATION_WHEN_SHOWN, "1");
+#endif
     m_Window = SDL_CreateWindow(title.c_str(), position, position, width, height,
                                 flags | StreamUtils::getPlatformWindowFlags());
     if (m_Window == nullptr) {
@@ -115,6 +120,9 @@ bool SecondaryStreamWindow::open()
                     SDL_GetError());
         m_Window = SDL_CreateWindow(title.c_str(), position, position, width, height, flags);
     }
+#ifdef SDL_HINT_WINDOW_NO_ACTIVATION_WHEN_SHOWN
+    SDL_SetHint(SDL_HINT_WINDOW_NO_ACTIVATION_WHEN_SHOWN, "0");
+#endif
     if (m_Window == nullptr) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
                      "SDL_CreateWindow() for the second window failed: %s",
@@ -231,7 +239,15 @@ void SecondaryStreamWindow::handleWindowEvent(const SDL_WindowEvent& event)
     case SDL_WINDOWEVENT_SHOWN:
         if (m_Decoder == nullptr && !recreateDecoder()) {
             stopAndClose();
+            break;
         }
+
+        // Whatever the platform did with focus, the stream starts on the first window with the first picture as the
+        // input target. The user clicks the second window when they want to use it.
+        if (m_Session->m_Window != nullptr) {
+            SDL_RaiseWindow(m_Session->m_Window);
+        }
+        LiSetInputTargetStream(0);
         break;
 
     case SDL_WINDOWEVENT_SIZE_CHANGED:
