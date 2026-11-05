@@ -2375,8 +2375,9 @@ void Session::exec()
             break;
 
         case SDL_WINDOWEVENT:
-            // Early handling of some events
-            switch (event.window.event) {
+            // Early handling of some events. Focus and pointer-leave belong to the first window: if the second
+            // window's focus gain re-captured the mouse, the capture would confine the pointer to the second window.
+            switch (m_SecondWindow != nullptr && m_SecondWindow->ownsWindow(event.window.windowID) ? 0 : event.window.event) {
             case SDL_WINDOWEVENT_FOCUS_LOST:
                 if (m_Preferences->muteOnFocusLoss) {
                     m_AudioMuted = true;
