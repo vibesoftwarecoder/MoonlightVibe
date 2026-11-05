@@ -39,11 +39,16 @@ public:
     bool ownsWindow(Uint32 windowId) const;
 
     void handleWindowEvent(const SDL_WindowEvent& event);
+    void handleKeyEvent(const SDL_KeyboardEvent* event);
     void renderFrameOnMainThread();
     void handleMouseMotion(const SDL_MouseMotionEvent* event);
     void handleMouseButton(const SDL_MouseButtonEvent* event);
 
 private:
+    // Borderless fullscreen on the display the window is on, and back. A maximized window is not the same: the
+    // title bar and taskbar take height, so the picture no longer fits the area and gets black bars.
+    void toggleFullscreen();
+
     // Close the window and tell the host to stop sending the stream it showed
     void stopAndClose();
     bool recreateDecoder();

@@ -187,6 +187,28 @@ bool SecondaryStreamWindow::recreateDecoder()
     return true;
 }
 
+void SecondaryStreamWindow::toggleFullscreen()
+{
+    if (m_Window == nullptr) {
+        return;
+    }
+
+    bool isFullscreen = (SDL_GetWindowFlags(m_Window) & SDL_WINDOW_FULLSCREEN_DESKTOP) == SDL_WINDOW_FULLSCREEN_DESKTOP;
+    if (SDL_SetWindowFullscreen(m_Window, isFullscreen ? 0 : SDL_WINDOW_FULLSCREEN_DESKTOP) != 0) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "Unable to change the fullscreen state of the second window: %s",
+                    SDL_GetError());
+    }
+}
+
+void SecondaryStreamWindow::handleKeyEvent(const SDL_KeyboardEvent* event)
+{
+    // F11 belongs to this window, not to the host. The release is swallowed as well so the host never sees half a key.
+    if (event->keysym.sym == SDLK_F11 && event->type == SDL_KEYDOWN && event->repeat == 0) {
+        toggleFullscreen();
+    }
+}
+
 void SecondaryStreamWindow::stopAndClose()
 {
     // The window is gone for good, so there is no reason for the host to keep encoding what it showed

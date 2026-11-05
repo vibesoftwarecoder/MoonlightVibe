@@ -2589,6 +2589,11 @@ void Session::exec()
         case SDL_KEYUP:
         case SDL_KEYDOWN:
             presence.runCallbacks();
+            if (m_SecondWindow != nullptr && m_SecondWindow->ownsWindow(event.key.windowID) &&
+                event.key.keysym.sym == SDLK_F11) {
+                m_SecondWindow->handleKeyEvent(&event.key);
+                break;
+            }
             m_InputHandler->handleKeyEvent(&event.key);
             break;
         case SDL_MOUSEBUTTONDOWN:
