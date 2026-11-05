@@ -182,6 +182,7 @@ public:
     Q_PROPERTY(int secondWindowWidth MEMBER secondWindowWidth NOTIFY secondWindowVideoChanged)
     Q_PROPERTY(int secondWindowHeight MEMBER secondWindowHeight NOTIFY secondWindowVideoChanged)
     Q_PROPERTY(int secondWindowFps MEMBER secondWindowFps NOTIFY secondWindowVideoChanged)
+    Q_PROPERTY(QString secondWindowTitle MEMBER secondWindowTitle NOTIFY secondWindowTitleChanged)
     Q_PROPERTY(bool swapMouseButtons MEMBER swapMouseButtons NOTIFY mouseButtonsChanged)
     Q_PROPERTY(bool muteOnFocusLoss MEMBER muteOnFocusLoss NOTIFY muteOnFocusLossChanged)
     Q_PROPERTY(bool usbForwardingEnabled MEMBER usbForwardingEnabled NOTIFY usbForwardingEnabledChanged)
@@ -219,8 +220,9 @@ public:
     bool quitAppAfter;
     bool absoluteMouseMode;
 
-    // Title of a window on the host to show in a second client window. Not saved: it comes from the command line
-    // (--second-window) or from the per-seat setting, and empty means no second window.
+    // Title of a window on the host to show in a second client window. Saved, and --second-window overrides it for
+    // a run; a per-seat setting fills it in when empty. Empty means no second window. A host that does not offer a
+    // second stream is never asked for one, so a saved title is harmless there.
     QString secondWindowTitle;
     bool absoluteTouchMode;
     bool framePacing;
@@ -288,6 +290,7 @@ signals:
     void primaryWindowDisplayChanged();
     void secondWindowDisplayChanged();
     void secondWindowVideoChanged();
+    void secondWindowTitleChanged();
     void windowModeChanged();
     void framePacingChanged();
     void connectionWarningsChanged();

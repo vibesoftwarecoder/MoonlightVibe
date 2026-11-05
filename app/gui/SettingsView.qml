@@ -1081,6 +1081,32 @@ Flickable {
                     ToolTip.text: qsTr("The frame rate of the video of the second window. 30 is enough for most windows and uses less bandwidth.")
                 }
 
+                Label {
+                    width: parent.width
+                    id: secondWindowTitleLabel
+                    text: qsTr("Second window: title of the host window")
+                    font.pointSize: 12
+                    wrapMode: Text.Wrap
+                    visible: SystemProperties.hasDesktopEnvironment
+                }
+
+                TextField {
+                    id: secondWindowTitleField
+                    width: parent.width
+                    visible: SystemProperties.hasDesktopEnvironment
+                    hoverEnabled: true
+                    placeholderText: qsTr("Empty means no second window")
+                    text: StreamingPreferences.secondWindowTitle
+                    onTextEdited: {
+                        StreamingPreferences.secondWindowTitle = text.trim()
+                    }
+
+                    ToolTip.delay: 1000
+                    ToolTip.timeout: 5000
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Type the title of a window on the host to show it in a second window. Leave it empty for one window. A host that does not offer a second stream ignores this.")
+                }
+
                 Row {
                     spacing: 5
                     width: parent.width

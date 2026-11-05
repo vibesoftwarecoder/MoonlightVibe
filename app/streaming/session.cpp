@@ -755,13 +755,13 @@ bool Session::initialize(QQuickWindow* qtWindow)
     RAND_bytes(reinterpret_cast<unsigned char*>(m_StreamConfig.remoteInputAesIv), 4);
     m_StreamConfig.enableMic = m_Preferences->enableMicrophone;
 
-    // A second window showing one window of the host. The command line sets it for a run; for a seat it can also
-    // be set under seatprefs/<uuid>/ (secondWindow = the window title, and optionally secondWindowWidth,
+    // A second window showing one window of the host. The Settings page saves the title and the command line
+    // overrides it for a run; for a seat it can also be set under seatprefs/<uuid>/ (secondWindow = the window title, and optionally secondWindowWidth,
     // secondWindowHeight, secondWindowFps and secondWindowBitrate). Empty means no second window.
     {
         QString secondTitle = m_Preferences->secondWindowTitle;
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-                    "Second window request: title [%s] (command line), host uuid [%s]",
+                    "Second window request: title [%s] (settings or command line), host uuid [%s]",
                     m_Preferences->secondWindowTitle.toUtf8().constData(),
                     m_Computer->uuid.toUtf8().constData());
         int secondWidth = m_Preferences->secondWindowWidth;
