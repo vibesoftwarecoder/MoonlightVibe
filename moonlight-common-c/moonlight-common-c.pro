@@ -29,12 +29,18 @@ win32 {
     INCLUDEPATH += $$PWD/../libs/windows/include
     DEFINES += HAS_QOS_FLOWID=1 HAS_PQOS_FLOWID=1
 }
-macx {
+macx:!disable-prebuilts {
     INCLUDEPATH += $$PWD/../libs/mac/include
 }
-unix:!macx {
+unix:if(!macx|disable-prebuilts) {
     CONFIG += link_pkgconfig
     PKGCONFIG += openssl
+}
+# TEMPORARY, remove when the moonlight-common-c pin moves past upstream's Platform.c rewrite:
+# our pinned Platform.c still tests #ifdef HAVE_CLOCK_GETTIME and upstream's .pro no longer
+# sets it, so without this the timing code silently takes the fallback path on Linux.
+# Same platforms as before the merge (unix, not macOS).
+unix:!macx {
     DEFINES += HAVE_CLOCK_GETTIME=1
 }
 
@@ -89,9 +95,16 @@ CONFIG(debug, debug|release) {
     DEFINES += LC_DEBUG
 }
 
+# TEMPORARY, same reason as HAVE_CLOCK_GETTIME above: upstream dropped this because its
+# new common-c is C11; our pinned one is not.
 # Older GCC versions defaulted to GNU89
 *-g++ {
     QMAKE_CFLAGS += -std=gnu99
+}
+
+# Enable support for C11 atomics on MSVC
+*-msvc {
+    QMAKE_CFLAGS += -std:c11 -experimental:c11atomics
 }
 
 # Disable unused parameter warnings on GCC and Clang
