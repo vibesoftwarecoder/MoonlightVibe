@@ -36,13 +36,6 @@ unix:if(!macx|disable-prebuilts) {
     CONFIG += link_pkgconfig
     PKGCONFIG += openssl
 }
-# TEMPORARY, remove when the moonlight-common-c pin moves past upstream's Platform.c rewrite:
-# our pinned Platform.c still tests #ifdef HAVE_CLOCK_GETTIME and upstream's .pro no longer
-# sets it, so without this the timing code silently takes the fallback path on Linux.
-# Same platforms as before the merge (unix, not macOS).
-unix:!macx {
-    DEFINES += HAVE_CLOCK_GETTIME=1
-}
 
 COMMON_C_DIR = $$PWD/moonlight-common-c
 ENET_DIR = $$COMMON_C_DIR/enet
@@ -93,13 +86,6 @@ DEFINES += HAS_SOCKLEN_T
 CONFIG(debug, debug|release) {
     # Enable asserts on debug builds
     DEFINES += LC_DEBUG
-}
-
-# TEMPORARY, same reason as HAVE_CLOCK_GETTIME above: upstream dropped this because its
-# new common-c is C11; our pinned one is not.
-# Older GCC versions defaulted to GNU89
-*-g++ {
-    QMAKE_CFLAGS += -std=gnu99
 }
 
 # Enable support for C11 atomics on MSVC
